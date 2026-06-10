@@ -23,25 +23,30 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
-# SSL Mode for PostgreSQL
-SSL_MODE = config('SSL_MODE', default='disable')
-
 
 # Application definition
-INSTALLED_APPS = [
+DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Third party
-    'rest_framework_simplejwt.token_blacklist',
-    'drf_spectacular',
-    'django_filters',
-    'rest_framework',
-    'rest_framework_simplejwt',
 ]
+
+THIRD_PARTY_APPS = [
+    "rest_framework",
+    "drf_spectacular",
+    "rest_framework_simplejwt",
+    "django_filters",
+    "rest_framework_simplejwt.token_blacklist",
+]
+
+PROJECT_APPS = [
+
+]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -84,9 +89,6 @@ DATABASES = {
         'PASSWORD': config('POSTGRES_PASSWORD'),
         'HOST': config('POSTGRES_DOCKER_HOST'),
         'PORT': config('POSTGRES_PORT', default='5432'),
-        'OPTIONS': {
-            'sslmode': SSL_MODE,
-        },
     }
 }
 # Password validation
@@ -109,9 +111,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "apps.organisation.authentication.CustomJWTAuthentication",
-    ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -119,7 +118,6 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
-    "COERCE_DECIMAL_TO_STRING": False,
 }
 
 
@@ -133,7 +131,6 @@ SIMPLE_JWT = {
     ),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
-    "TOKEN_OBTAIN_SERIALIZER": "authentication.serializers.CustomTokenObtainPairSerializer",
 }
 
 # Internationalization
