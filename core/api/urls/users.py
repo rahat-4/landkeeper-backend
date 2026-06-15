@@ -1,5 +1,6 @@
 from django.urls import path
-from api.views.auth import (
+
+from api.views.users import (
     UserListCreateAPIView,
     UserRetrieveUpdateDestroyAPIView
 )
