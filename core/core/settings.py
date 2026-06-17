@@ -48,6 +48,7 @@ THIRD_PARTY_APPS = [
     "allauth.socialaccount.providers.google",
     "dj_rest_auth",
     "dj_rest_auth.registration",
+    "easy_thumbnails",
 ]
 
 PROJECT_APPS = [
