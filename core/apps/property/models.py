@@ -52,6 +52,9 @@ class Mortgage(CreatedAtUpdatedAtBaseModel):
     )
     renewal_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name="mortgages"
+    )
 
     def __str__(self):
         return f"{self.lender_name} - {self.mortgage_account_number}"
