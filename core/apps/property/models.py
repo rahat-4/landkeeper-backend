@@ -57,23 +57,48 @@ class Mortgage(CreatedAtUpdatedAtBaseModel):
     def __str__(self):
         return f"{self.lender_name} - {self.mortgage_account_number}"
 
+
+class Tenant(CreatedAtUpdatedAtBaseModel):
+    tenant_name = models.CharField(max_length=255, blank=True, null=True)
+    contact_details = models.TextField(blank=True, null=True)
+    tenancy_start_date = models.DateField(blank=True, null=True)
+    tenancy_end_date = models.DateField(blank=True, null=True)
+    rent_amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    deposit_amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
+    guarantor_details = models.TextField(blank=True, null=True)
+    employment_details = models.TextField(blank=True, null=True)
+    id_verification_records = models.TextField(blank=True, null=True)
+    properties = models.ManyToManyField(
+        Property,
+        blank=True,
+        related_name="tenants"
+    )
+
+    def __str__(self):
+        return f"{self.tenant_name}"
+
+class TenantDocument(CreatedAtUpdatedAtBaseModel):
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="documents"
+    )
+    file = models.FileField(upload_to='tenant_documents/')
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.tenant.tenant_name}"
+
 class ComplianceAndCertification(CreatedAtUpdatedAtBaseModel):
-    epc = models.CharField(max_length=255, blank=True, null=True)
     certificate_type = models.CharField(
         max_length=50,
         choices=CertificateType.choices,
         blank=True,
         null=True,
     )
-    gas_safety_certificate = models.CharField(max_length=255, blank=True, null=True)
-    electrical_safety_certificate = models.CharField(max_length=255, blank=True, null=True)
-    fire_risk_assessment = models.CharField(max_length=255, blank=True, null=True)
-    hmo_licence = models.CharField(max_length=255, blank=True, null=True)
-    insurance_documents = models.CharField(max_length=255, blank=True, null=True)
-    pat_testing = models.CharField(max_length=255, blank=True, null=True)
-    legionella_assessment = models.CharField(max_length=255, blank=True, null=True)
     issue_date = models.DateField(blank=True, null=True)
     expiry_date = models.DateField(blank=True, null=True)
+    certificate_number = models.PositiveIntegerField(blank=True, null=True)
     issued_by = models.CharField(max_length=255, blank=True, null=True)
     certificate_file = models.FileField(upload_to="compliance_certificates/", blank=True, null=True)
     property = models.ForeignKey(

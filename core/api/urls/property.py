@@ -4,8 +4,12 @@ from api.views.property import (
     PropertyRetrieveUpdateDestroyAPIView,
     MortgageListCreateAPIView,
     MortgageRetrieveAPIView,
+    TenantRetrieveAPIView,
+    TenantListCreateAPIView,
+    TenantDocumentListCreateAPIView,
+    TenantDocumentRetrieveAPIView,
     ComplianceAndCertificationListCreateAPIView,
-    ComplianceAndCertificationRetrieveAPIView
+    ComplianceAndCertificationRetrieveAPIView,
 )
 
 urlpatterns = [
@@ -22,12 +26,32 @@ urlpatterns = [
     path(
         "mortgage/",
         MortgageListCreateAPIView.as_view(),
-        name="property-list-create"
+        name="mortgage-list-create"
     ),
     path(
         "mortgage/<uuid:alias>/",
         MortgageRetrieveAPIView.as_view(),
-        name="property-retrieve-update"
+        name="mortgage-retrieve-update"
+    ),
+    path(
+        "tenants/",
+        TenantListCreateAPIView.as_view(),
+        name="tenant-list-create"
+    ),
+    path(
+        "tenants/<uuid:alias>/",
+        TenantRetrieveAPIView.as_view(),
+        name="tenant-retrieve-update"
+    ),
+    path(""
+         "tenants/<uuid:alias>/documents/",
+         TenantDocumentListCreateAPIView.as_view(),
+         name="tenant-document-list-create"
+    ),
+    path(
+        "tenants/<uuid:alias>/documents/<uuid:document_alias>/",
+        TenantDocumentRetrieveAPIView.as_view(),
+        name="tenant-document-detail"
     ),
     path(
         "compliance/",

@@ -2,7 +2,9 @@ from rest_framework import serializers
 from apps.property.models import (
     Property,
     Mortgage,
-    ComplianceAndCertification
+    Tenant,
+    TenantDocument,
+    ComplianceAndCertification,
 )
 from common.models import Media
 
@@ -97,6 +99,61 @@ class MortgageSerializers(serializers.ModelSerializer):
             "updated_at",
         ]
 
+class TenantDocumentSerializer(serializers.ModelSerializer):
+    files = serializers.ListField(
+        child=serializers.FileField(),
+        write_only=True,
+        required=False
+    )
+    file = serializers.FileField(
+        read_only=False,
+        required=False
+    )
+
+    class Meta:
+        model = TenantDocument
+        fields = [
+            "alias",
+            "files",
+            "file",
+            "description",
+        ]
+        read_only_fields = [
+            "alias",
+            "file",
+        ]
+
+class TenantSerializer(serializers.ModelSerializer):
+    documents = TenantDocumentSerializer(many=True, read_only=True)
+    properties = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Property.objects.all()
+    )
+
+    class Meta:
+        model = Tenant
+        fields = [
+            "alias",
+            "properties",
+            "tenant_name",
+            "contact_details",
+            "tenancy_start_date",
+            "tenancy_end_date",
+            "rent_amount",
+            "deposit_amount",
+            "guarantor_details",
+            "employment_details",
+            "id_verification_records",
+            "documents",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "alias",
+            "created_at",
+            "updated_at",
+        ]
+
 class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
     property_name = serializers.CharField(source="property.name", read_only=True)
 
@@ -106,15 +163,7 @@ class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
             "alias",
             "property",
             "property_name",
-            "epc",
             "certificate_type",
-            "gas_safety_certificate",
-            "electrical_safety_certificate",
-            "fire_risk_assessment",
-            "hmo_licence",
-            "insurance_documents",
-            "pat_testing",
-            "legionella_assessment",
             "issue_date",
             "expiry_date",
             "issued_by",
