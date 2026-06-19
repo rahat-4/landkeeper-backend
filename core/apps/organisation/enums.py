@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+
 class GenderChoices(models.TextChoices):
     MALE = "MALE", _("Male")
     FEMALE = "FEMALE", _("Female")
@@ -8,10 +9,9 @@ class GenderChoices(models.TextChoices):
 
 
 class OrganisationRoleChoices(models.TextChoices):
-    CLIENT = "CLIENT", _("Client")
-    ORGANISATION_ADVISER = "ORGANISATION_ADVISER", _("Organisation Adviser")
-    ORGANISATION_DIRECTOR = "ORGANISATION_DIRECTOR", _("Organisation Director")
-    ORGANISATION_ADMIN = "ORGANISATION_ADMIN", _("Organisation Admin")
+    LANDLORD = "LANDLORD", _("Landlord")
+    ADMIN = "ADMIN", _("Admin")
+    LETTING_AGENT = "LETTING_AGENT", _("Letting Agent")
 
 
 class SourceChoices(models.TextChoices):

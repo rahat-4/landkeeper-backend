@@ -3,14 +3,15 @@ from django.utils.translation import gettext_lazy as _
 from apps.organisation.enums import (
     GenderChoices,
     OrganisationRoleChoices,
-    SourceChoices
+    SourceChoices,
 )
 from common.models import (
     NameSlugDescriptionBaseModel,
     TimestampThumbnailImageField,
-    CreatedAtUpdatedAtBaseModel
+    CreatedAtUpdatedAtBaseModel,
 )
 from django.db import models
+
 
 class Organisation(NameSlugDescriptionBaseModel):
     email = models.EmailField(unique=True)
@@ -52,48 +53,10 @@ class OrganisationUser(CreatedAtUpdatedAtBaseModel):
     role = models.CharField(
         max_length=64,
         choices=OrganisationRoleChoices.choices,
-        default=OrganisationRoleChoices.ORGANISATION_ADMIN,
+        default=OrganisationRoleChoices.LANDLORD,
         blank=True,
         null=True,
         verbose_name=_("Role"),
-    )
-    designation = models.CharField(
-        max_length=128, blank=True, null=True, verbose_name=_("Designation")
-    )
-    official_email = models.EmailField(
-        max_length=255, blank=True, null=True, verbose_name=_("Official Email")
-    )
-    official_phone = models.CharField(
-        max_length=24, blank=True, null=True, verbose_name=_("Official Phone")
-    )
-    permanent_address = models.CharField(
-        max_length=255, blank=True, null=True, verbose_name=_("Permanent Address")
-    )
-    present_address = models.CharField(
-        max_length=255, blank=True, null=True, verbose_name=_("Present Address")
-    )
-    dob = models.DateField(blank=True, null=True, verbose_name=_("Date of Birth"))
-    gender = models.CharField(
-        max_length=10,
-        choices=GenderChoices.choices,
-        default=GenderChoices.MALE,
-        verbose_name=_("Gender"),
-    )
-    joining_date = models.DateField(
-        blank=True, null=True, verbose_name=_("Joining Date")
-    )
-    source = models.CharField(
-        max_length=255,
-        choices=SourceChoices.choices,
-        blank=True,
-        null=True,
-        verbose_name=_("Source"),
-    )
-    other_source = models.CharField(max_length=255, blank=True, null=True)
-    note = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name=_("Note"),
     )
 
     class Meta:

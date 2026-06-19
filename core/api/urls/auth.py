@@ -13,7 +13,7 @@ from api.views.auth import (
 )
 
 urlpatterns = [
-    path("register/", AccountRegistrationView.as_view(), name="register"),
+    path("register", AccountRegistrationView.as_view(), name="register"),
     path("login/", CustomLoginView.as_view(), name="login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("social/google/", GoogleLoginView.as_view(), name="google-login"),

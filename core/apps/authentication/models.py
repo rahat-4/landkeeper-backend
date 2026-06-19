@@ -1,12 +1,12 @@
+from django.db import models
 from django.contrib.auth.base_user import BaseUserManager, AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
 from django.utils.translation import gettext_lazy as _
-from apps.authentication.enums import (
-    NameTitleChoices,
-    UserRoleChoices
-)
-from django.db import models
+
 from common.models import CreatedAtUpdatedAtBaseModel
+
+from .enums import NameTitleChoices, UserRoleChoices
+from .utils import profile_image_upload_path
 
 
 class UserManager(BaseUserManager):
@@ -44,30 +44,11 @@ class User(AbstractBaseUser, PermissionsMixin, CreatedAtUpdatedAtBaseModel):
     title = models.CharField(
         max_length=64, choices=NameTitleChoices.choices, default=NameTitleChoices.MR
     )
-    first_name = models.CharField(max_length=64, blank=True)
+    first_name = models.CharField(max_length=64)
     middle_name = models.CharField(max_length=64, blank=True)
-    last_name = models.CharField(max_length=64, blank=True)
-    role = models.CharField(
-        max_length=20,
-        choices=UserRoleChoices.choices,
-        null=True,
-        blank=True,
-    )
-    profile_image = models.ImageField(upload_to="user/profile", blank=True, null=True)
-    city = models.CharField(
-        db_index=True, max_length=64, unique=False, null=True, blank=True, default=None
-    )
-    state = models.CharField(
-        db_index=True, max_length=64, unique=False, null=True, blank=True, default=None
-    )
-    country = models.CharField(
-        db_index=True, max_length=64, unique=False, null=True, blank=True, default=None
-    )
-    post_code = models.CharField(
-        db_index=True, max_length=64, unique=False, null=True, blank=True, default=None
-    )
-    address = models.CharField(
-        db_index=True, max_length=255, unique=False, null=True, blank=True, default=None
+    last_name = models.CharField(max_length=64)
+    profile_image = models.ImageField(
+        upload_to=profile_image_upload_path, blank=True, null=True
     )
     is_staff = models.BooleanField(
         _("staff status"),
@@ -79,7 +60,6 @@ class User(AbstractBaseUser, PermissionsMixin, CreatedAtUpdatedAtBaseModel):
         default=True,
         help_text=_("Designates whether this user should be treated as active."),
     )
-    is_password_set = models.BooleanField(default=False)
 
     objects = UserManager()
 

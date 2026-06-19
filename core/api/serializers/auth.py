@@ -1,12 +1,69 @@
 from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
-from rest_framework import serializers
+
 from django.contrib.auth import get_user_model
+from django.db import transaction
+
+from rest_framework import serializers
+
+from apps.organisation.models import Organisation, OrganisationUser
+from apps.subscription.models import UserSubscription, SubscriptionPlan
+
 User = get_user_model()
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = [
+            "profile_image",
+            "title",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone",
+            "password",
+        ]
+
+    def create(self, validated_data):
+        with transaction.atomic():
+            password = validated_data.pop("password")
+
+            # 1. Create user
+            user = User(**validated_data)
+            user.set_password(password)
+            user.save()
+
+            # 2. Assign FREE subscription
+            free_plan = SubscriptionPlan.objects.filter(name__iexact="free").first()
+            if not free_plan:
+                raise serializers.ValidationError("Free plan is not configured.")
+
+            UserSubscription.objects.create(user=user, plan=free_plan, is_active=True)
+
+            # 3. Create default organisation
+            organisation = Organisation.objects.create(
+                name=f"{user.first_name}'s Organisation",
+                email=user.email,
+                primary_mobile=user.phone or "",
+            )
+
+            # 4. Add user as OWNER in organisation
+            OrganisationUser.objects.create(
+                user=user,
+                organisation=organisation,
+            )
+
+            return user
+
 
 class CustomLoginSerializer(LoginSerializer):
     username = None
     email = serializers.EmailField(required=True)
     password = serializers.CharField(write_only=True)
+
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8, required=False)
@@ -57,6 +114,7 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+
 
 class CustomJWTSerializer(JWTSerializer):
     user = UserSerializer(read_only=True)
