@@ -1,11 +1,16 @@
 from django.db import models
-from common.models import CreatedAtUpdatedAtBaseModel, Media
+from common.models import (
+    CreatedAtUpdatedAtBaseModel,
+    Media,
+    DocumentFile
+)
 from .enums import (
     PropertyType,
     CertificateType,
     StatusType,
     PropertyProductType,
-    MortgageProductType
+    MortgageProductType,
+    DocumentCategoryType
 )
 
 class Property(CreatedAtUpdatedAtBaseModel):
@@ -146,3 +151,24 @@ class ComplianceAndCertification(CreatedAtUpdatedAtBaseModel):
 
     def __str__(self):
         return f"Compliance Record {self.pk}"
+
+class UploadDocument(CreatedAtUpdatedAtBaseModel):
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name="upload_documents"
+    )
+    document_category = models.CharField(
+        max_length=50,
+        choices=DocumentCategoryType.choices,
+        blank=True,
+        null=True,
+    )
+    document_name = models.CharField(max_length=100, blank=True, null=True)
+    tags = models.TextField(blank=True, null=True)
+    files = models.ManyToManyField(
+        DocumentFile,
+        blank=True,
+        related_name="upload_documents",
+    )
+
+    def __str__(self):
+        return f"Upload Document - {self.document_name}"

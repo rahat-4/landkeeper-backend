@@ -94,3 +94,11 @@ class Media(CreatedAtUpdatedAtBaseModel):
 
     def __str__(self):
         return os.path.basename(self.image.name)
+
+
+class DocumentFile(CreatedAtUpdatedAtBaseModel):
+    file = models.FileField(upload_to=media_path)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return os.path.basename(self.file.name)

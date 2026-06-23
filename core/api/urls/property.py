@@ -10,6 +10,8 @@ from api.views.property import (
     TenantDocumentRetrieveAPIView,
     ComplianceAndCertificationListCreateAPIView,
     ComplianceAndCertificationRetrieveAPIView,
+    UploadDocumentListCreateApiView,
+    UploadDocumentRetrieveAPIView,
 )
 
 urlpatterns = [
@@ -62,5 +64,15 @@ urlpatterns = [
         "compliance/<uuid:alias>/",
         ComplianceAndCertificationRetrieveAPIView.as_view(),
         name="compliance-retrieve-update"
+    ),
+    path(
+        "document-upload/",
+        UploadDocumentListCreateApiView.as_view(),
+        name="upload-document-list-create"
+    ),
+    path(
+        "document-upload/<uuid:alias>/",
+        UploadDocumentRetrieveAPIView.as_view(),
+        name="upload-document-detail"
     )
 ]

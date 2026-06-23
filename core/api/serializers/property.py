@@ -1,3 +1,4 @@
+import os
 from rest_framework import serializers
 from apps.property.models import (
     Property,
@@ -5,8 +6,12 @@ from apps.property.models import (
     Tenant,
     TenantDocument,
     ComplianceAndCertification,
+    UploadDocument,
 )
-from common.models import Media
+from common.models import (
+    Media,
+    DocumentFile
+)
 
 
 class MediaSerializer(serializers.ModelSerializer):
@@ -184,3 +189,71 @@ class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+class DocumentFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentFile
+        fields = [
+            "id",
+            "file",
+            "description"
+        ]
+
+
+class UploadDocumentSerializer(serializers.ModelSerializer):
+    files = DocumentFileSerializer(many=True, read_only=True)
+    uploaded_files = serializers.ListField(
+        child=serializers.FileField(),
+        write_only=True,
+        required=False,
+    )
+    property_name = serializers.CharField(source="property.property_name", read_only=True)
+
+    class Meta:
+        model = UploadDocument
+        fields = [
+            "alias",
+            "property",
+            "property_name",
+            "document_category",
+            "document_name",
+            "tags",
+            "files",
+            "uploaded_files",
+        ]
+
+    def validate_uploaded_files(self, files):
+        allowed_extensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png"]
+        limit = 50 * 1024 * 1024  # 50MB
+
+        for file in files:
+            if file.size > limit:
+                raise serializers.ValidationError(f"{file.name} exceeds 50MB limit.")
+            ext = os.path.splitext(file.name)[1].lower()
+            if ext not in allowed_extensions:
+                raise serializers.ValidationError(f"{file.name} has an unsupported file type.")
+
+        return files
+
+    def create(self, validated_data):
+        uploaded_files = validated_data.pop("uploaded_files", [])
+        upload_document = UploadDocument.objects.create(**validated_data)
+
+        for file in uploaded_files:
+            doc_file = DocumentFile.objects.create(file=file)
+            upload_document.files.add(doc_file)
+
+        return upload_document
+
+    def update(self, instance, validated_data):
+        uploaded_files = validated_data.pop("uploaded_files", [])
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        for file in uploaded_files:
+            doc_file = DocumentFile.objects.create(file=file)
+            instance.files.add(doc_file)
+
+        return instance

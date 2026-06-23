@@ -13,6 +13,7 @@ from apps.property.models import (
     Tenant,
     TenantDocument,
     ComplianceAndCertification,
+    UploadDocument,
 )
 from api.serializers.property import (
     PropertySerializer,
@@ -20,6 +21,7 @@ from api.serializers.property import (
     TenantSerializer,
     TenantDocumentSerializer,
     ComplianceAndCertificationSerializers,
+    UploadDocumentSerializer,
 )
 
 
@@ -137,8 +139,27 @@ class ComplianceAndCertificationRetrieveAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = ComplianceAndCertificationSerializers
     permission_classes = [IsAuthenticated]
     lookup_field = "alias"
+
     def get_object(self):
         return get_object_or_404(
             ComplianceAndCertification,
+            alias=self.kwargs["alias"]
+        )
+
+class UploadDocumentListCreateApiView(ListCreateAPIView):
+    serializer_class = UploadDocumentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UploadDocument.objects.all()
+
+class UploadDocumentRetrieveAPIView(RetrieveUpdateDestroyAPIView):
+    serializer_class = UploadDocumentSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "alias"
+
+    def get_object(self):
+        return get_object_or_404(
+            UploadDocument,
             alias=self.kwargs["alias"]
         )
