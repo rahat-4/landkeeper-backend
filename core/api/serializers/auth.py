@@ -121,7 +121,11 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 class UserProfileSerializer(serializers.ModelSerializer):
-
+    role = serializers.CharField(
+        source="organisation_users.first.role",
+        read_only=True,
+        default=None,
+    )
     class Meta:
         model = User
         fields = [
@@ -130,6 +134,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "first_name",
             "middle_name",
             "last_name",
+            "role",
             "phone",
             "profile_image",
             "is_active",
@@ -139,6 +144,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "email",
             "is_active",
+            "role",
             "created_at",
             "updated_at"
         ]
