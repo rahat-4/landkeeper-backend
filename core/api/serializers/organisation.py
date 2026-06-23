@@ -1,9 +1,5 @@
 from rest_framework import serializers
-from apps.organisation.models import (
-    Organisation,
-    OrganisationUser,
-    User
-)
+from apps.organisation.models import Organisation, OrganisationUser, User
 from api.serializers.auth import UserProfileSerializer
 
 
@@ -14,7 +10,6 @@ class OrganisationSerializer(serializers.ModelSerializer):
             "slug",
             "name",
             "description",
-            "email",
             "logo",
             "profile_image",
             "primary_mobile",
@@ -27,6 +22,7 @@ class OrganisationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+
 class OrganisationUserMinimalSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -36,7 +32,8 @@ class OrganisationUserMinimalSerializer(serializers.ModelSerializer):
 class OrganisationMinimalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organisation
-        fields = ["slug", "name", "email"]
+        fields = ["slug", "name"]
+
 
 class OrganisationUserSerializer(serializers.ModelSerializer):
     user = OrganisationUserMinimalSerializer(read_only=True)
@@ -76,6 +73,5 @@ class OrganisationUserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         organisation = self.context["organisation"]
         return OrganisationUser.objects.create(
-            organisation=organisation,
-            **validated_data
+            organisation=organisation, **validated_data
         )
