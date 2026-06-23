@@ -207,7 +207,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 
 # Email settings
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -221,3 +226,15 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL")
 
 BACKEND_URL = config("BACKEND_URL")
 FRONTEND_URL = config("FRONTEND_URL")
+
+
+# CORS Configuration
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.landkeeper.co.uk",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "https://api.landkeeper.co.uk",
+]
