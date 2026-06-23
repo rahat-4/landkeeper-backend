@@ -13,14 +13,13 @@ User = get_user_model()
 
 
 class Organisation(NameSlugDescriptionBaseModel):
-    email = models.EmailField(unique=True)
     logo = TimestampThumbnailImageField(
         upload_to="organisation/logo", blank=True, null=True
     )
     profile_image = TimestampThumbnailImageField(
         upload_to="organisation/profile", blank=True, null=True
     )
-    primary_mobile = models.CharField(max_length=20)
+    primary_mobile = models.CharField(max_length=20, blank=True, null=True)
     other_contact = models.CharField(max_length=64, blank=True, null=True)
     contact_person = models.CharField(max_length=64, blank=True, null=True)
     website = models.URLField(blank=True, null=True)
@@ -31,7 +30,7 @@ class Organisation(NameSlugDescriptionBaseModel):
         ordering = ["-created_at", "-updated_at"]
 
     def __str__(self):
-        return f"{self.email} - {self.name}"
+        return f"{self.name}"
 
 
 class OrganisationUser(CreatedAtUpdatedAtBaseModel):

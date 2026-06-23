@@ -1,20 +1,12 @@
-from dj_rest_auth.serializers import (
-    LoginSerializer,
-    JWTSerializer
-)
+from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
-from apps.organisation.models import (
-    Organisation,
-    OrganisationUser
-)
-from apps.subscription.models import (
-    UserSubscription,
-    SubscriptionPlan
-)
+from apps.organisation.models import Organisation, OrganisationUser
+from apps.subscription.models import UserSubscription, SubscriptionPlan
 
 User = get_user_model()
+
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -51,7 +43,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             # 3. Create default organisation
             organisation = Organisation.objects.create(
                 name=f"{user.first_name}'s Organisation",
-                email=user.email,
                 primary_mobile=user.phone or "",
             )
 
