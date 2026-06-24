@@ -10,7 +10,7 @@ def send_password_reset_email(user):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        reset_link = f"{settings.BACKEND_URL}/api/auth/password/reset/{uid}/{token}/"
+        reset_link = f"{settings.BACKEND_URL}/api/auth/forgot-password/{uid}/{token}"
 
         subject = "Reset Your Password"
 
