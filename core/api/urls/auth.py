@@ -15,8 +15,12 @@ urlpatterns = [
     path("/login", CustomLoginView.as_view(), name="login"),
     path("/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("/social/google", GoogleLoginView.as_view(), name="google-login"),
-    path("/send-email", ForgotPasswordView.as_view(), name="send-email"),
-    path("/forgot-password/<uidb64>/<token>", SetForgotPasswordView.as_view(), name="forgot_password"),
+    path("/forgot-password", ForgotPasswordView.as_view(), name="forgot_password"),
+    path(
+        "/set-password/<uidb64>/<token>",
+        SetForgotPasswordView.as_view(),
+        name="set_forgot_password",
+    ),
     path("/change-password", ChangePasswordView.as_view(), name="change_password"),
     path("/profile", UserProfileView.as_view(), name="user-profile"),
 ]

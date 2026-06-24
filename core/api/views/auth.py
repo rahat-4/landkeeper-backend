@@ -45,19 +45,19 @@ class ForgotPasswordView(APIView):
         # Check if email field is provided
         if not email:
             return Response(
-                {"email": "This field is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"email": "This field is required."}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Check if email format is valid
         from django.core.validators import validate_email
         from django.core.exceptions import ValidationError
+
         try:
             validate_email(email)
         except ValidationError:
             return Response(
                 {"email": "Enter a valid email address."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Check if user exists with this email
@@ -66,14 +66,14 @@ class ForgotPasswordView(APIView):
         except User.DoesNotExist:
             return Response(
                 {"email": "No account found with this email address."},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         # Check if the user account is active
         if not user.is_active:
             return Response(
                 {"email": "This account is inactive. Please contact support."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         send_password_reset_email(user)
@@ -105,7 +105,7 @@ class SetForgotPasswordView(APIView):
 
         params = urlencode({"uid": uidb64, "token": token})
         return HttpResponseRedirect(
-            f"{settings.FRONTEND_URL}/auth/forgot-password?{params}"
+            f"{settings.FRONTEND_URL}/auth/set-password?{params}"
         )
 
     def post(self, request, uidb64, token):
@@ -144,6 +144,7 @@ class SetForgotPasswordView(APIView):
             {"detail": "Password has been reset successfully."},
             status=status.HTTP_200_OK,
         )
+
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
