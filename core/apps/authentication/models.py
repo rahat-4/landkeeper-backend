@@ -1,3 +1,7 @@
+import random
+import string
+from django.utils import timezone
+from datetime import timedelta
 from django.db import models
 from django.contrib.auth.base_user import BaseUserManager, AbstractBaseUser
 from django.contrib.auth.models import PermissionsMixin
@@ -81,3 +85,27 @@ class User(AbstractBaseUser, PermissionsMixin, CreatedAtUpdatedAtBaseModel):
     def __str__(self):
         name = f"{self.first_name} {self.last_name}".strip()
         return f"{name or 'User'} - {self.email}"
+
+class EmailVerification(CreatedAtUpdatedAtBaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_verification')
+    code = models.CharField(max_length=6)
+    is_verified = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            self.expires_at = timezone.now() + timedelta(minutes=2)
+        super().save(*args, **kwargs)
+
+    def is_expired(self):
+        if not self.expires_at:
+            return True
+        return timezone.now() > self.expires_at
+
+    def generate_code(self):
+        self.code = ''.join(random.choices(string.digits, k=6))
+        self.save()
+
+    @staticmethod
+    def make_code():
+        return ''.join(random.choices(string.digits, k=6))

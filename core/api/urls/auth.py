@@ -8,10 +8,14 @@ from api.views.auth import (
     ForgotPasswordView,
     ChangePasswordView,
     UserProfileView,
+    EmailVerifyView,
+    ResendVerificationView,
 )
 
 urlpatterns = [
     path("/register", AccountRegistrationView.as_view(), name="register"),
+    path("/verify-email", EmailVerifyView.as_view(), name="verify-email"),
+    path("/resend-verify", ResendVerificationView.as_view(), name="resend-verify"),
     path("/login", CustomLoginView.as_view(), name="login"),
     path("/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("/social/google", GoogleLoginView.as_view(), name="google-login"),

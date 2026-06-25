@@ -1,11 +1,13 @@
+from datetime import timedelta
+from django.utils import timezone
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_decode
 from dj_rest_auth.registration.views import SocialLoginView
 from dj_rest_auth.views import LoginView
-from api.utils import send_password_reset_email
-from apps.authentication.models import User
+from api.utils import send_password_reset_email, send_verification_email
+from apps.authentication.models import User, EmailVerification
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 from django.conf import settings
@@ -14,8 +16,11 @@ from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-
-from ..serializers.auth import UserRegistrationSerializer, UserProfileSerializer
+from ..serializers.auth import (
+    UserRegistrationSerializer,
+    UserProfileSerializer,
+    EmailVerifySerializer
+)
 
 
 class AccountRegistrationView(CreateAPIView):
@@ -25,6 +30,56 @@ class AccountRegistrationView(CreateAPIView):
     def get_queryset(self):
         return User.objects.all()
 
+class EmailVerifyView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = EmailVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {"detail": "Email verified successfully. You can now log in."},
+            status=status.HTTP_200_OK
+        )
+
+class ResendVerificationView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+
+        if not email:
+            return Response(
+                {"detail": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email, is_active=False)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "No unverified user found with this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        code = EmailVerification.make_code()
+
+        try:
+            verification = EmailVerification.objects.get(user=user)
+            verification.code = code
+            verification.is_verified = False
+            verification.expires_at = timezone.now() + timedelta(minutes=2)
+            verification.save()
+        except EmailVerification.DoesNotExist:
+            EmailVerification.objects.create(
+                user=user,
+                code=code,
+            )
+        send_verification_email(user, code)
+        return Response(
+            {"detail": "Verification code resent."},
+            status=status.HTTP_200_OK
+        )
 
 class CustomLoginView(LoginView):
     permission_classes = [AllowAny]

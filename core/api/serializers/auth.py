@@ -2,8 +2,10 @@ from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
+from apps.authentication.models import EmailVerification
 from apps.organisation.models import Organisation, OrganisationUser
 from apps.subscription.models import UserSubscription, SubscriptionPlan
+from api.utils import send_verification_email
 
 User = get_user_model()
 
@@ -28,31 +30,72 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             password = validated_data.pop("password")
 
-            # 1. Create user
+            # Create user
             user = User(**validated_data)
             user.set_password(password)
+            user.is_active = False
             user.save()
 
-            # 2. Assign FREE subscription
+            # Assign FREE subscription
             free_plan = SubscriptionPlan.objects.filter(name__iexact="free").first()
             if not free_plan:
                 raise serializers.ValidationError("Free plan is not configured.")
-
             UserSubscription.objects.create(user=user, plan=free_plan, is_active=True)
 
-            # 3. Create default organisation
+            # Create default organisation
             organisation = Organisation.objects.create(
                 name=f"{user.first_name}'s Organisation",
                 primary_mobile=user.phone or "",
             )
 
-            # 4. Add user as OWNER in organisation
-            OrganisationUser.objects.create(
-                user=user,
-                organisation=organisation,
-            )
+            # Add user as OWNER in organisation
+            OrganisationUser.objects.create(user=user, organisation=organisation)
+
+            # Create verification code and send email
+            code = EmailVerification.make_code()
+            EmailVerification.objects.create(user=user, code=code)
+            send_verification_email(user, code)
 
             return user
+
+class EmailVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code  = serializers.CharField(max_length=6)
+
+    def validate(self, data):
+        try:
+            user = User.objects.get(email=data['email'])
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Invalid email.")
+
+        try:
+            verification = user.email_verification
+        except EmailVerification.DoesNotExist:
+            raise serializers.ValidationError("No verification code found.")
+
+        if verification.is_verified:
+            raise serializers.ValidationError("Email already verified.")
+
+        if verification.is_expired():
+            raise serializers.ValidationError("Code has expired. Please request a new one.")
+
+        if verification.code != data['code']:
+            raise serializers.ValidationError("Invalid code.")
+
+        data['user'] = user
+        data['verification'] = verification
+        return data
+
+    def save(self):
+        user = self.validated_data['user']
+        verification = self.validated_data['verification']
+
+        verification.is_verified = True
+        verification.save()
+
+        user.is_active = True
+        user.save()
+        return user
 
 
 class CustomLoginSerializer(LoginSerializer):
