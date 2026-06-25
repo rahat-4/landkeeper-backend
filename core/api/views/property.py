@@ -9,22 +9,24 @@ from apps.property.models import (
     Mortgage,
     Tenant,
     ComplianceAndCertification,
-    UploadDocument, Finance,
+    UploadDocument,
+    Finance,
 )
 from api.serializers.property import (
     PropertySerializer,
     MortgageSerializers,
     TenantSerializer,
     ComplianceAndCertificationSerializers,
-    UploadDocumentSerializer, FinanceSerializer,
+    UploadDocumentSerializer,
+    FinanceSerializer,
 )
 
 
 class PropertyListView(ListCreateAPIView):
     serializer_class = PropertySerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields = ["property_type"]
-    search_fields = ["property_name", "lender_name", "address"]
+    filterset_fields = ["property_type", "status"]
+    search_fields = ["property_name", "address"]
 
     def get_queryset(self):
         organisation = self.request.user.get_organisation()
@@ -141,6 +143,7 @@ class UploadDocumentRetrieveAPIView(RetrieveUpdateDestroyAPIView):
 
     def get_object(self):
         return get_object_or_404(UploadDocument, alias=self.kwargs["alias"])
+
 
 class FinanceListView(ListCreateAPIView):
     serializer_class = FinanceSerializer
