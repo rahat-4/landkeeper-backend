@@ -164,11 +164,6 @@ class DocumentFileSerializer(serializers.ModelSerializer):
 
 class UploadDocumentSerializer(serializers.ModelSerializer):
     files = DocumentFileSerializer(many=True, read_only=True)
-    uploaded_files = serializers.ListField(
-        child=serializers.FileField(),
-        write_only=True,
-        required=False,
-    )
     property_name = serializers.CharField(
         source="property.property_name", read_only=True
     )
@@ -183,10 +178,9 @@ class UploadDocumentSerializer(serializers.ModelSerializer):
             "document_name",
             "tags",
             "files",
-            "uploaded_files",
         ]
 
-    def validate_uploaded_files(self, files):
+    def _validate_files(self, files):
         allowed_extensions = [
             ".pdf",
             ".doc",
@@ -195,33 +189,29 @@ class UploadDocumentSerializer(serializers.ModelSerializer):
             ".xlsx",
             ".jpg",
             ".jpeg",
-            ".png",
+            ".png"
         ]
-        limit = 50 * 1024 * 1024  # 50MB
-
+        limit = 50 * 1024 * 1024
         for file in files:
             if file.size > limit:
                 raise serializers.ValidationError(f"{file.name} exceeds 50MB limit.")
             ext = os.path.splitext(file.name)[1].lower()
             if ext not in allowed_extensions:
-                raise serializers.ValidationError(
-                    f"{file.name} has an unsupported file type."
-                )
-
-        return files
+                raise serializers.ValidationError(f"{file.name} has an unsupported file type.")
 
     def create(self, validated_data):
         uploaded_files = validated_data.pop("uploaded_files", [])
+        self._validate_files(uploaded_files)
         upload_document = UploadDocument.objects.create(**validated_data)
 
         for file in uploaded_files:
             doc_file = DocumentFile.objects.create(file=file)
             upload_document.files.add(doc_file)
-
         return upload_document
 
     def update(self, instance, validated_data):
         uploaded_files = validated_data.pop("uploaded_files", [])
+        self._validate_files(uploaded_files)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -230,7 +220,6 @@ class UploadDocumentSerializer(serializers.ModelSerializer):
         for file in uploaded_files:
             doc_file = DocumentFile.objects.create(file=file)
             instance.files.add(doc_file)
-
         return instance
 
 class FinanceSerializer(serializers.ModelSerializer):

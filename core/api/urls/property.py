@@ -1,4 +1,6 @@
 from django.urls import path
+from rest_framework.views import APIView
+
 from api.views.property import (
     PropertyListView,
     PropertyDetailView,
@@ -8,6 +10,8 @@ from api.views.property import (
     TenantDetailView,
     ComplianceAndCertificationListView,
     ComplianceAndCertificationDetailView,
+    UploadDocumentRetrieveAPIView,
+    UploadDocumentListCreateApiView,
     FinanceDetailView,
     FinanceListView,
 )
@@ -37,6 +41,16 @@ urlpatterns = [
     path(
         "/compliance/<uuid:compliance_alias>",
         ComplianceAndCertificationDetailView.as_view(),
+    ),
+    path(
+        "/document",
+        UploadDocumentListCreateApiView.as_view(),
+        name="document-list-create",
+    ),
+    path(
+        "/document/<uuid:document_alias>",
+        UploadDocumentRetrieveAPIView.as_view(),
+        name="document-Details",
     ),
     path(
         "/finance",

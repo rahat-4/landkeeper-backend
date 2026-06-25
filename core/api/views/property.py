@@ -133,16 +133,30 @@ class UploadDocumentListCreateApiView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return UploadDocument.objects.all()
+        organisation = self.request.user.get_organisation()
+        if not organisation:
+            raise NotFound("Organisation not found for the user.")
+        return UploadDocument.objects.filter(organisation=organisation)
+
+    def perform_create(self, serializer):
+        organisation = self.request.user.get_organisation()
+        if not organisation:
+            raise NotFound("Organisation not found for the user.")
+
+        uploaded_files = self.request.FILES.getlist("uploaded_files")
+        serializer.save(organisation=organisation, uploaded_files=uploaded_files)
 
 
 class UploadDocumentRetrieveAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = UploadDocumentSerializer
     permission_classes = [IsAuthenticated]
-    lookup_field = "alias"
 
     def get_object(self):
-        return get_object_or_404(UploadDocument, alias=self.kwargs["alias"])
+        return get_object_or_404(UploadDocument, alias=self.kwargs["document_alias"])
+
+    def perform_update(self, serializer):
+        uploaded_files = self.request.FILES.getlist("uploaded_files")
+        serializer.save(uploaded_files=uploaded_files)
 
 
 class FinanceListView(ListCreateAPIView):

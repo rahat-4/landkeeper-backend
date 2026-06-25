@@ -154,9 +154,6 @@ class ComplianceAndCertification(CreatedAtUpdatedAtBaseModel):
 
 
 class UploadDocument(CreatedAtUpdatedAtBaseModel):
-    property = models.ForeignKey(
-        Property, on_delete=models.CASCADE, related_name="upload_documents"
-    )
     document_category = models.CharField(
         max_length=50,
         choices=DocumentCategoryType.choices,
@@ -167,6 +164,14 @@ class UploadDocument(CreatedAtUpdatedAtBaseModel):
     tags = models.TextField(blank=True, null=True)
     files = models.ManyToManyField(
         DocumentFile, blank=True, related_name="upload_documents"
+    )
+
+    #fk
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name="upload_documents"
+    )
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="upload_documents"
     )
 
     def __str__(self):
