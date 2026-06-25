@@ -16,12 +16,12 @@ from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from apps.authentication.signals import create_default_organisation
 from ..serializers.auth import (
     UserRegistrationSerializer,
     UserProfileSerializer,
     EmailVerifySerializer
 )
-
 
 class AccountRegistrationView(CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -29,6 +29,10 @@ class AccountRegistrationView(CreateAPIView):
 
     def get_queryset(self):
         return User.objects.all()
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        create_default_organisation(user)
 
 class EmailVerifyView(APIView):
     permission_classes = [AllowAny]
