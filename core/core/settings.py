@@ -142,25 +142,25 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 12,
 }
 
-SIMPLE_JWT = {
-    "AUTH_HEADER_TYPES": ("JWT", "Bearer"),
-    "ACCESS_TOKEN_LIFETIME": timedelta(seconds=10),
-    "REFRESH_TOKEN_LIFETIME": timedelta(minutes=1),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-}
-
 # SIMPLE_JWT = {
 #     "AUTH_HEADER_TYPES": ("JWT", "Bearer"),
-#     "ACCESS_TOKEN_LIFETIME": timedelta(
-#         minutes=config("ACCESS_TOKEN_LIFETIME_MINUTES", default=15, cast=int)
-#     ),
-#     "REFRESH_TOKEN_LIFETIME": timedelta(
-#         days=config("REFRESH_TOKEN_LIFETIME_DAYS", default=1, cast=int)
-#     ),
+#     "ACCESS_TOKEN_LIFETIME": timedelta(seconds=10),
+#     "REFRESH_TOKEN_LIFETIME": timedelta(minutes=1),
 #     "ROTATE_REFRESH_TOKENS": True,
 #     "BLACKLIST_AFTER_ROTATION": True,
 # }
+
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("JWT", "Bearer"),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=config("ACCESS_TOKEN_LIFETIME_MINUTES", default=15, cast=int)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=config("REFRESH_TOKEN_LIFETIME_DAYS", default=1, cast=int)
+    ),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
 
 AUTH_USER_MODEL = "authentication.User"
 
