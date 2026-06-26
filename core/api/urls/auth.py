@@ -10,6 +10,7 @@ from api.views.auth import (
     UserProfileView,
     EmailVerifyView,
     ResendVerificationView,
+    LogoutAPIView,
 )
 
 urlpatterns = [
@@ -17,6 +18,7 @@ urlpatterns = [
     path("/verify-email", EmailVerifyView.as_view(), name="verify-email"),
     path("/resend-verify", ResendVerificationView.as_view(), name="resend-verify"),
     path("/login", CustomLoginView.as_view(), name="login"),
+    path('/logout', LogoutAPIView.as_view(), name='logout'),
     path("/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("/social/google", GoogleLoginView.as_view(), name="google-login"),
     path("/forgot-password", ForgotPasswordView.as_view(), name="forgot_password"),

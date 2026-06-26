@@ -6,6 +6,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_decode
 from dj_rest_auth.registration.views import SocialLoginView
 from dj_rest_auth.views import LoginView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from api.utils import send_password_reset_email, send_verification_email
 from apps.authentication.models import User, EmailVerification
 from urllib.parse import urlencode
@@ -243,6 +245,31 @@ class ChangePasswordView(APIView):
             {"detail": "Password changed successfully."}, status=status.HTTP_200_OK
         )
 
+class LogoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh_token")
+
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            return Response(
+                {"detail": "Logged out successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except TokenError as e:
+            return Response(
+                {"error": "Invalid or expired token."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class UserProfileView(RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
