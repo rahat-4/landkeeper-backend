@@ -71,7 +71,14 @@ class MortgageDetailView(RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        return get_object_or_404(Mortgage, alias=self.kwargs["mortgage_alias"])
+        organisation = self.request.user.get_organisation()
+        if not organisation:
+            raise NotFound("Organisation not found for the user.")
+        return get_object_or_404(
+            Mortgage,
+            alias=self.kwargs["mortgage_alias"],
+            organisation=organisation
+        )
 
 
 class TenantListView(ListCreateAPIView):

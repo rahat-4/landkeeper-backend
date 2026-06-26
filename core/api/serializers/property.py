@@ -21,6 +21,15 @@ class MediaSerializer(serializers.ModelSerializer):
         ]
 
 
+class DocumentFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentFile
+        fields = [
+            "id",
+            "file",
+            "description"
+        ]
+
 class PropertySerializer(serializers.ModelSerializer):
     documents_data = serializers.ListField(
         child=serializers.ImageField(), required=False, write_only=True
@@ -88,6 +97,13 @@ class PropertySerializer(serializers.ModelSerializer):
 
 
 class MortgageSerializers(serializers.ModelSerializer):
+    mortgage_documents = serializers.ListField(
+        child=serializers.FileField(), write_only=True, required=False
+    )
+    uploaded_documents = DocumentFileSerializer(
+        source="mortgage_documents", many=True, read_only=True
+    )
+
     class Meta:
         model = Mortgage
         fields = [
@@ -103,6 +119,8 @@ class MortgageSerializers(serializers.ModelSerializer):
             "start_date",
             "end_date",
             "broker_notes",
+            "mortgage_documents",
+            "uploaded_documents",
             "created_at",
             "updated_at",
         ]
@@ -111,6 +129,48 @@ class MortgageSerializers(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def _validate_mortgage_files(self, files):
+        allowed_extensions = [
+            ".pdf",
+            ".doc",
+            ".docx",
+            ".xls",
+            ".xlsx",
+            ".jpg",
+            ".jpeg",
+            ".png",
+        ]
+        limit = 50 * 1024 * 1024
+        for file in files:
+            if file.size > limit:
+                raise serializers.ValidationError(f"{file.name} exceeds 50MB limit.")
+            ext = os.path.splitext(file.name)[1].lower()
+            if ext not in allowed_extensions:
+                raise serializers.ValidationError(f"{file.name} has an unsupported file type.")
+
+    def create(self, validated_data):
+        uploaded_files = validated_data.pop("mortgage_documents", [])
+        self._validate_mortgage_files(uploaded_files)
+        mortgage = Mortgage.objects.create(**validated_data)
+
+        for file in uploaded_files:
+            doc_file = DocumentFile.objects.create(file=file)
+            mortgage.mortgage_documents.add(doc_file)
+        return mortgage
+
+    def update(self, instance, validated_data):
+        uploaded_files = validated_data.pop("mortgage_documents", [])
+        self._validate_mortgage_files(uploaded_files)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        for file in uploaded_files:
+            doc_file = DocumentFile.objects.create(file=file)
+            instance.mortgage_documents.add(doc_file)
+        return instance
 
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -122,6 +182,7 @@ class TenantSerializer(serializers.ModelSerializer):
             "last_name",
             "email",
             "phone",
+            "image",
             "rent_amount",
             "deposit",
             "tenancy_start_date",
@@ -156,13 +217,6 @@ class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-
-
-class DocumentFileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DocumentFile
-        fields = ["id", "file", "description"]
-
 
 class UploadDocumentSerializer(serializers.ModelSerializer):
     files = DocumentFileSerializer(many=True, read_only=True)
