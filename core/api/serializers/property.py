@@ -124,6 +124,7 @@ class TenantSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = [
             "alias",
+            "avatar",
             "first_name",
             "last_name",
             "email",

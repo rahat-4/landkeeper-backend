@@ -52,6 +52,7 @@ class PropertyDetailView(RetrieveUpdateDestroyAPIView):
 class MortgageListView(ListCreateAPIView):
     serializer_class = MortgageSerializers
     permission_classes = [IsAuthenticated]
+    search_fields = ["property__property_name", "lender_name"]
 
     def get_queryset(self):
         organisation = self.request.user.get_organisation()

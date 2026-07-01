@@ -10,7 +10,7 @@ from .enums import (
     TransactionType,
     Category,
 )
-from .utils import certificate_file_upload_path
+from .utils import certificate_file_upload_path, tenant_avatar_upload_path
 
 
 class Property(CreatedAtUpdatedAtBaseModel):
@@ -95,6 +95,9 @@ class Mortgage(CreatedAtUpdatedAtBaseModel):
 
 
 class Tenant(CreatedAtUpdatedAtBaseModel):
+    avatar = models.ImageField(
+        upload_to=tenant_avatar_upload_path, blank=True, null=True
+    )
     first_name = models.CharField(max_length=64)
     last_name = models.CharField(max_length=64)
     email = models.EmailField(blank=True, null=True)
@@ -166,7 +169,7 @@ class UploadDocument(CreatedAtUpdatedAtBaseModel):
         DocumentFile, blank=True, related_name="upload_documents"
     )
 
-    #fk
+    # fk
     property = models.ForeignKey(
         Property, on_delete=models.CASCADE, related_name="upload_documents"
     )
@@ -177,17 +180,13 @@ class UploadDocument(CreatedAtUpdatedAtBaseModel):
     def __str__(self):
         return f"Upload Document - {self.document_name}"
 
+
 class Finance(CreatedAtUpdatedAtBaseModel):
     type = models.CharField(
-        max_length=20,
-        choices=TransactionType.choices,
-        default=TransactionType.INCOME
+        max_length=20, choices=TransactionType.choices, default=TransactionType.INCOME
     )
     category = models.CharField(
-        max_length=20,
-        choices=Category.choices,
-        null=True,
-        blank=True
+        max_length=20, choices=Category.choices, null=True, blank=True
     )
     amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
@@ -195,12 +194,13 @@ class Finance(CreatedAtUpdatedAtBaseModel):
     receipt = models.ManyToManyField(
         DocumentFile, blank=True, related_name="finance_documents"
     )
-    #fk
+    # fk
     property = models.ForeignKey(
         Property, on_delete=models.CASCADE, related_name="finance_property"
     )
     organisation = models.ForeignKey(
         Organisation, on_delete=models.CASCADE, related_name="finance_organisation"
     )
+
     def __str__(self):
         return f"Finance - {self.type}"
