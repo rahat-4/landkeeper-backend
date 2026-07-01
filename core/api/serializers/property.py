@@ -142,6 +142,11 @@ class TenantSerializer(serializers.ModelSerializer):
             "alias",
         ]
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation["property"] = PropertySlimSerializer(instance.property).data
+        return representation
+
 
 class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
     class Meta:

@@ -116,7 +116,7 @@ class Tenant(CreatedAtUpdatedAtBaseModel):
 
     # FK
     property = models.ForeignKey(
-        Property, blank=True, on_delete=models.CASCADE, related_name="property_tenants"
+        Property, on_delete=models.CASCADE, related_name="property_tenants"
     )
     organisation = models.ForeignKey(
         Organisation, on_delete=models.CASCADE, related_name="organisation_tenants"
