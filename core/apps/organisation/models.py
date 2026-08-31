@@ -25,6 +25,10 @@ class Organisation(NameSlugDescriptionBaseModel):
     website = models.URLField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    stripe_account_id = models.CharField(max_length=64, blank=True, null=True)
+    stripe_charges_enabled = models.BooleanField(default=False)
+    stripe_payouts_enabled = models.BooleanField(default=False)
+    stripe_details_submitted = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at", "-updated_at"]

@@ -15,6 +15,8 @@ def create_payment_intent(
     payment_method_id=None,
     idempotency_key=None,
     metadata=None,
+    stripe_account_destination = None,
+    application_fee_amount = None,
 ):
 
     params = {
@@ -31,6 +33,11 @@ def create_payment_intent(
         params["customer"] = customer_id
     if payment_method_id:
         params["payment_method"] = payment_method_id
+
+    if stripe_account_destination:
+        params["transfer_data"] = {"destination": stripe_account_destination}
+        if application_fee_amount:
+            params["application_fee_amount"] = int(application_fee_amount)
 
     request_options = {}
     if idempotency_key:

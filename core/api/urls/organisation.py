@@ -5,6 +5,8 @@ from api.views.organisation import (
     OrganisationUserDetailView,
     OrganisationInviteUserView,
     OrganisationListView,
+    StripeConnectOnboardingView,
+    StripeConnectStatusView,
 )
 
 urlpatterns = [
@@ -33,4 +35,14 @@ urlpatterns = [
         OrganisationUserDetailView.as_view(),
         name="organisation-user-detail",
     ),
+    path(
+        "/stripe-onboarding",
+        StripeConnectOnboardingView.as_view(),
+        name="organisation-stripe-onboarding",
+    ),
+    path(
+        "/stripe-connect-status",
+        StripeConnectStatusView.as_view(),
+        name="organisation-stripe-connect-status",
+    )
 ]
