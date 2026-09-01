@@ -8,7 +8,9 @@ from apps.tenant.enums import (
     PaymentProviderChoices,
     PaymentMethodTypeChoices,
     PaymentMethodStatusChoices,
-    RentPaymentStatusChoices, MaintenanceCategory, MaintenanceStatus
+    RentPaymentStatusChoices,
+    MaintenanceCategory,
+    MaintenanceStatus
 )
 from apps.tenant.utils import receipt_upload_path
 from common.models import CreatedAtUpdatedAtBaseModel, DocumentFile

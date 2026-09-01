@@ -6,7 +6,7 @@ from rest_framework.generics import (
     RetrieveUpdateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -17,7 +17,13 @@ from api.serializers.organisation import (
     OrganisationUserSerializer,
     OrganisationInviterUserSerializer,
 )
-from apps.organisation.stripe_connect import create_connect_account, create_account_link, logger
+from apps.organisation.stripe_connect import (
+    get_oauth_authorize_url,
+    exchange_oauth_code,
+    save_oauth_result,
+    logger,
+)
+
 from common.permission import IsLandlord
 
 
@@ -92,24 +98,72 @@ class OrganisationUserDetailView(RetrieveUpdateDestroyAPIView):
         return context
 
 
-class StripeConnectOnboardingView(APIView):
+class StripeConnectOAuthStartView(APIView):
     permission_classes = [IsLandlord]
 
-    def post(self, request):
+    def get(self, request):
         organisation = request.user.get_organisation()
         if not organisation:
-            return Response({"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        if not organisation.stripe_account_id:
-            create_connect_account(organisation, email=request.user.email)
+        authorize_url = get_oauth_authorize_url(organisation)
+        return Response({"authorize_url": authorize_url}, status=status.HTTP_200_OK)
+
+
+class StripeConnectOAuthCallbackView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        code = request.GET.get("code")
+        state = request.GET.get("state")
+        error = request.GET.get("error")
+
+        if error:
+            logger.warning(
+                "Stripe OAuth denied by landlord",
+                extra={"error": error, "state": state},
+            )
+            return Response(
+                {"error": "Stripe connection was denied or cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not code or not state:
+            return Response(
+                {"error": "Missing code or state."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
-            account_link = create_account_link(organisation)
-        except stripe.error.StripeError:
-            logger.exception("Failed to create Stripe account link", extra={"organisation_id": organisation.id})
-            return Response({"error": "Payment provider error. Please try again."}, status=status.HTTP_502_BAD_GATEWAY)
+            organisation = Organisation.objects.get(id=state)
+        except Organisation.DoesNotExist:
+            return Response(
+                {"error": "Invalid organisation."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        return Response({"onboarding_url": account_link.url}, status=status.HTTP_200_OK)
+        try:
+            oauth_response = exchange_oauth_code(code)
+        except stripe.error.StripeError:
+            logger.exception(
+                "Stripe OAuth token exchange failed",
+                extra={"organisation_id": organisation.id},
+            )
+            return Response(
+                {"error": "Failed to connect Stripe account."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        save_oauth_result(organisation, oauth_response)
+
+        return Response(
+            {
+                "connected": True,
+                "stripe_account_id": organisation.stripe_account_id,
+                "charges_enabled": organisation.stripe_charges_enabled,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class StripeConnectStatusView(APIView):
@@ -118,9 +172,13 @@ class StripeConnectStatusView(APIView):
     def get(self, request):
         organisation = request.user.get_organisation()
         if not organisation:
-            return Response({"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({
-            "charges_enabled": organisation.stripe_charges_enabled,
-            "payouts_enabled": organisation.stripe_payouts_enabled,
-            "details_submitted": organisation.stripe_details_submitted,
-        })
+            return Response(
+                {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(
+            {
+                "charges_enabled": organisation.stripe_charges_enabled,
+                "payouts_enabled": organisation.stripe_payouts_enabled,
+                "details_submitted": organisation.stripe_details_submitted,
+            }
+        )

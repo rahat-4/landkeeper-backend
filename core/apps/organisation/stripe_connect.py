@@ -8,35 +8,53 @@ logger = logging.getLogger("apps.organisation.stripe_connect")
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
-def create_connect_account(organisation, email):
-    account = stripe.Account.create(
-        type="express",
-        country="GB",
-        email=email,
-        capabilities={
-            "card_payments": {"requested": True},
-            "transfers": {"requested": True},
-        },
-        business_type="company",
-        metadata={"organisation_id": str(organisation.id)},
-    )
-    organisation.stripe_account_id = account.id
-    organisation.save(update_fields=["stripe_account_id"])
-    return account
-
-
-def create_account_link(organisation):
-    if not organisation.stripe_account_id:
-        raise ValueError("Organisation has no Stripe account yet")
-    return stripe.AccountLink.create(
-        account=organisation.stripe_account_id,
-        refresh_url=f"{settings.FRONTEND_URL}/settings/payments/refresh",
-        return_url=f"{settings.FRONTEND_URL}/settings/payments/complete",
-        type="account_onboarding",
+def get_oauth_authorize_url(organisation):
+    return (
+        "https://connect.stripe.com/oauth/authorize"
+        f"?response_type=code"
+        f"&client_id={settings.STRIPE_CONNECT_CLIENT_ID}"
+        f"&scope=read_write"
+        f"&state={organisation.id}"
+        f"&redirect_uri={settings.FRONTEND_URL}/settings/payments/oauth-callback"
     )
 
 
-def sync_account_status(stripe_account_id, charges_enabled, payouts_enabled, details_submitted):
+def exchange_oauth_code(code):
+    return stripe.OAuth.token(grant_type="authorization_code", code=code)
+
+
+def save_oauth_result(organisation, oauth_response):
+    organisation.stripe_account_id = oauth_response.stripe_user_id
+    organisation.stripe_publishable_key = oauth_response.stripe_publishable_key
+    organisation.set_stripe_access_token(oauth_response.access_token)
+    organisation.save(
+        update_fields=[
+            "stripe_account_id",
+            "stripe_publishable_key",
+            "stripe_access_token_encrypted",
+        ]
+    )
+    sync_account_status_from_stripe(organisation)
+
+
+def sync_account_status_from_stripe(organisation):
+    account = stripe.Account.retrieve(organisation.stripe_account_id)
+    organisation.stripe_charges_enabled = account.charges_enabled
+    organisation.stripe_payouts_enabled = account.payouts_enabled
+    organisation.stripe_details_submitted = account.details_submitted
+    organisation.save(
+        update_fields=[
+            "stripe_charges_enabled",
+            "stripe_payouts_enabled",
+            "stripe_details_submitted",
+        ]
+    )
+    return organisation
+
+
+def sync_account_status(
+    stripe_account_id, charges_enabled, payouts_enabled, details_submitted
+):
     updated = Organisation.objects.filter(stripe_account_id=stripe_account_id).update(
         stripe_charges_enabled=charges_enabled,
         stripe_payouts_enabled=payouts_enabled,

@@ -58,7 +58,10 @@ from api.serializers.tenants import (
     MaintenanceRequestSerializer,
     MaintenanceRequestCommentSerializer,
 )
-from apps.organisation.stripe_connect import sync_account_status
+from apps.organisation.stripe_connect import (
+    sync_account_status,
+    sync_account_status_from_stripe,
+)
 from apps.property.models import Tenant, ComplianceAndCertification, Property
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
@@ -178,6 +181,7 @@ class CardPaymentView(APIView):
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
+        print("RECEIVED AMOUNT:", serializer.validated_data["amount"])
         due_date = serializer.validated_data["due_date"]
         amount = serializer.validated_data["amount"]
         payment_method_id = serializer.validated_data.get("payment_method_id")
@@ -187,15 +191,28 @@ class CardPaymentView(APIView):
                 {"error": "payment_method_id is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         tenant = request.user
         organisation = tenant.property.organisation
 
         if not organisation.stripe_charges_enabled:
-            return Response(
-                {"error": "Your landlord has not finished setting up payments yet. Please contact them."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            if organisation.stripe_account_id:
+                try:
+                    sync_account_status_from_stripe(organisation)
+                    organisation.refresh_from_db()
+                except stripe.error.StripeError:
+                    logger.exception(
+                        "CardPaymentView: failed to refresh Stripe account status",
+                        extra={"organisation_id": organisation.id},
+                    )
+
+            if not organisation.stripe_charges_enabled:
+                return Response(
+                    {
+                        "error": "Your landlord has not finished setting up payments yet. Please contact them."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         alias = uuid.uuid4()
         try:

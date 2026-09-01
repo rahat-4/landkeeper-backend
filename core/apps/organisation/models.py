@@ -9,6 +9,9 @@ from common.models import (
     CreatedAtUpdatedAtBaseModel,
 )
 
+from apps.organisation.crypto import encrypt_token
+from apps.organisation.crypto import decrypt_token
+
 User = get_user_model()
 
 
@@ -25,7 +28,9 @@ class Organisation(NameSlugDescriptionBaseModel):
     website = models.URLField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
-    stripe_account_id = models.CharField(max_length=64, blank=True, null=True)
+    stripe_account_id = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    stripe_publishable_key = models.CharField(max_length=128, blank=True, null=True)
+    stripe_access_token_encrypted = models.TextField(blank=True, null=True)
     stripe_charges_enabled = models.BooleanField(default=False)
     stripe_payouts_enabled = models.BooleanField(default=False)
     stripe_details_submitted = models.BooleanField(default=False)
@@ -35,6 +40,12 @@ class Organisation(NameSlugDescriptionBaseModel):
 
     def __str__(self):
         return f"{self.name}"
+
+    def set_stripe_access_token(self, plain_token):
+        self.stripe_access_token_encrypted = encrypt_token(plain_token)
+
+    def get_stripe_access_token(self):
+        return decrypt_token(self.stripe_access_token_encrypted)
 
 
 class OrganisationUser(CreatedAtUpdatedAtBaseModel):
