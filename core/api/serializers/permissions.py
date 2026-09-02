@@ -261,6 +261,8 @@ class AvailablePropertySerializer(serializers.ModelSerializer):
 
 
 class AvailableMortgageSerializer(serializers.ModelSerializer):
+    property = PropertySlimSerializer(read_only=True)
+
     class Meta:
         model = Mortgage
         fields = [
