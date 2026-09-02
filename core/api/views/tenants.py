@@ -7,7 +7,6 @@ import uuid
 from io import BytesIO
 import gocardless_pro
 import stripe
-from django_celery_beat import querysets
 from rest_framework.exceptions import NotFound
 from datetime import date, timedelta
 from django.conf import settings
@@ -31,7 +30,7 @@ from reportlab.platypus import (
     Paragraph,
     Spacer,
 )
-from rest_framework import permissions, status
+from rest_framework import permissions, status, response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.generics import (
@@ -59,7 +58,11 @@ from api.serializers.tenants import (
     MaintenanceRequestSerializer,
     MaintenanceRequestCommentSerializer,
 )
-from apps.property.models import Tenant, ComplianceAndCertification
+from apps.organisation.stripe_connect import (
+    sync_account_status,
+    sync_account_status_from_stripe,
+)
+from apps.property.models import Tenant, ComplianceAndCertification, Property
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
     PaymentProviderChoices,
@@ -178,6 +181,7 @@ class CardPaymentView(APIView):
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
+        print("RECEIVED AMOUNT:", serializer.validated_data["amount"])
         due_date = serializer.validated_data["due_date"]
         amount = serializer.validated_data["amount"]
         payment_method_id = serializer.validated_data.get("payment_method_id")
@@ -188,13 +192,40 @@ class CardPaymentView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        tenant = request.user
+        organisation = tenant.property.organisation
+
+        if not organisation.stripe_charges_enabled:
+            if organisation.stripe_account_id:
+                try:
+                    sync_account_status_from_stripe(organisation)
+                    organisation.refresh_from_db()
+                except stripe.error.StripeError:
+                    logger.exception(
+                        "CardPaymentView: failed to refresh Stripe account status",
+                        extra={"organisation_id": organisation.id},
+                    )
+
+            if not organisation.stripe_charges_enabled:
+                return Response(
+                    {
+                        "error": "Your landlord has not finished setting up payments yet. Please contact them."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         alias = uuid.uuid4()
         try:
             intent = create_payment_intent(
                 amount=amount,
                 payment_method_id=payment_method_id,
                 idempotency_key=f"card-{alias}",
-                metadata={"tenant_id": str(request.user.id), "due_date": str(due_date)},
+                metadata={
+                    "tenant_id": str(request.user.id),
+                    "due_date": str(due_date),
+                    "organisation_id": str(organisation.id),
+                },
+                stripe_account_destination=organisation.stripe_account_id,
             )
         except stripe.error.CardError as e:
             logger.warning(
@@ -636,6 +667,13 @@ class StripeWebhookView(APIView):
                         data_object["id"],
                         RentPaymentStatusChoices.FAILED,
                         failure_reason=reason,
+                    )
+                elif event_type == "account.updated":
+                    sync_account_status(
+                        stripe_account_id=data_object["id"],
+                        charges_enabled=data_object.get("charges_enabled", False),
+                        payouts_enabled=data_object.get("payouts_enabled", False),
+                        details_submitted=data_object.get("details_submitted", False),
                     )
         except Exception:
             logger.exception(
