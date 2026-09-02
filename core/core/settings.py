@@ -273,6 +273,9 @@ GOCARDLESS_WEBHOOK_SECRET = config("GOCARDLESS_WEBHOOK_SECRET", default="")
 STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
 STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
 
+FRONTEND_PAYMENT_SUCCESS_URL = f"{FRONTEND_URL}/payment/success"
+FRONTEND_PAYMENT_CANCEL_URL = f"{FRONTEND_URL}/payment/cancel"
+
 # Redis
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 

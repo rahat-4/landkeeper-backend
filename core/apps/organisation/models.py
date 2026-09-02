@@ -29,6 +29,9 @@ class Organisation(NameSlugDescriptionBaseModel):
     website = models.URLField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    stripe_customer_id = models.CharField(
+        max_length=255, blank=True, null=True, db_index=True
+    )
 
     class Meta:
         ordering = ["-created_at", "-updated_at"]
@@ -70,6 +73,8 @@ class OrganisationUser(CreatedAtUpdatedAtBaseModel):
 
 
 class OrganisationSubscription(CreatedAtUpdatedAtBaseModel):
+    Status = OrganisationSubscriptionStatus
+
     organisation = models.OneToOneField(
         "organisation.Organisation",
         on_delete=models.CASCADE,
@@ -83,11 +88,18 @@ class OrganisationSubscription(CreatedAtUpdatedAtBaseModel):
     status = models.CharField(
         max_length=20,
         choices=OrganisationSubscriptionStatus.choices,
-        default=OrganisationSubscriptionStatus.ACTIVE,
+        default=OrganisationSubscriptionStatus.PENDING,
     )
-    started_at = models.DateTimeField()
-    current_period_start = models.DateTimeField()
-    current_period_end = models.DateTimeField()
+    # Stripe subscription ID for reference
+    stripe_subscription_id = models.CharField(
+        max_length=255, blank=True, null=True, db_index=True
+    )
+    stripe_checkout_session_id = models.CharField(
+        max_length=255, blank=True, null=True
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    current_period_start = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -95,3 +107,14 @@ class OrganisationSubscription(CreatedAtUpdatedAtBaseModel):
 
     def __str__(self):
         return f"{self.organisation} - {self.plan}"
+
+
+class ProcessedWebhookEvent(CreatedAtUpdatedAtBaseModel):
+    stripe_event_id = models.CharField(max_length=255, unique=True, db_index=True)
+    event_type = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.event_type} ({self.stripe_event_id})"

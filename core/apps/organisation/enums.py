@@ -24,6 +24,7 @@ class SourceChoices(models.TextChoices):
 
 
 class OrganisationSubscriptionStatus(models.TextChoices):
+    PENDING = "PENDING", _("Pending")
     ACTIVE = "ACTIVE", "Active"
     TRIALING = "TRIALING", "Trialing"
     PAST_DUE = "PAST_DUE", "Past Due"
