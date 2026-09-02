@@ -268,6 +268,7 @@ class AvailableMortgageSerializer(serializers.ModelSerializer):
         fields = [
             "alias",
             "lender_name",
+            "epc_rating",
             "interest_rate_type",
             "interest_rate",
             "interest_rate_expiry_date",
