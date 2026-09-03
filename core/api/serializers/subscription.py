@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.organisation.models import OrganisationSubscription
 from apps.subscription.models import SubscriptionFeature, SubscriptionPlan
 
 
@@ -45,3 +46,18 @@ class SelectSubscriptionSerializer(serializers.Serializer):
             )
 
         return plan
+
+
+class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+
+    class Meta:
+        model = OrganisationSubscription
+        fields = [
+            "status",
+            "plan",
+            "started_at",
+            "current_period_start",
+            "current_period_end",
+            "cancelled_at",
+        ]

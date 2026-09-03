@@ -1,7 +1,11 @@
 from django.urls import path
 
-from api.views.subscription import SubscriptionPlanListView, SelectSubscriptionView
-
+from api.views.subscription import (
+    SubscriptionPlanListView,
+    SelectSubscriptionView,
+    SubscriptionStatusView,
+    StripeWebhookView,
+)
 
 urlpatterns = [
     path(
@@ -13,5 +17,15 @@ urlpatterns = [
         "/plans/select",
         SelectSubscriptionView.as_view(),
         name="select-subscription",
+    ),
+    path(
+        "/status",
+        SubscriptionStatusView.as_view(),
+        name="subscription-status",
+    ),
+    path(
+        "/stripe",
+        StripeWebhookView.as_view(),
+        name="stripe-webhook",
     ),
 ]
