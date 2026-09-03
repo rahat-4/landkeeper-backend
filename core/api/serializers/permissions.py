@@ -261,11 +261,14 @@ class AvailablePropertySerializer(serializers.ModelSerializer):
 
 
 class AvailableMortgageSerializer(serializers.ModelSerializer):
+    property = PropertySlimSerializer(read_only=True)
+
     class Meta:
         model = Mortgage
         fields = [
             "alias",
             "lender_name",
+            "epc_rating",
             "interest_rate_type",
             "interest_rate",
             "interest_rate_expiry_date",

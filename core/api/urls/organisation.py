@@ -5,13 +5,16 @@ from api.views.organisation import (
     OrganisationUserDetailView,
     OrganisationInviteUserView,
     OrganisationListView,
+    StripeConnectStatusView,
+    StripeConnectOAuthStartView,
+    StripeConnectOAuthCallbackView,
 )
 
 urlpatterns = [
     path(
-    "/list",
-    OrganisationListView.as_view(),
-    name="organisation-list",
+        "/list",
+        OrganisationListView.as_view(),
+        name="organisation-list",
     ),
     path(
         "",
@@ -32,5 +35,20 @@ urlpatterns = [
         "/users/<uuid:user_alias>",
         OrganisationUserDetailView.as_view(),
         name="organisation-user-detail",
+    ),
+    path(
+        "/stripe-oauth-start",
+        StripeConnectOAuthStartView.as_view(),
+        name="organisation-stripe-oauth-start",
+    ),
+    path(
+        "/stripe-oauth-callback",
+        StripeConnectOAuthCallbackView.as_view(),
+        name="organisation-stripe-oauth-callback",
+    ),
+    path(
+        "/stripe-connect-status",
+        StripeConnectStatusView.as_view(),
+        name="organisation-stripe-connect-status",
     ),
 ]
