@@ -315,3 +315,7 @@ CHANNEL_LAYERS = {
 
 STRIPE_CONNECT_CLIENT_ID = config("STRIPE_CONNECT_CLIENT_ID", default="")
 STRIPE_TOKEN_ENCRYPTION_KEY = config("STRIPE_TOKEN_ENCRYPTION_KEY", default="")
+STRIPE_CONNECT_REDIRECT_URI = config(
+    "STRIPE_CONNECT_REDIRECT_URI",
+    default=f"{FRONTEND_URL}/settings/payments/oauth-callback",
+)
