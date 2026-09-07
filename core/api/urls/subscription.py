@@ -5,6 +5,7 @@ from api.views.subscription import (
     SelectSubscriptionView,
     SubscriptionStatusView,
     StripeWebhookView,
+    LandlordPaymentMethodListView,
 )
 
 urlpatterns = [
@@ -27,5 +28,10 @@ urlpatterns = [
         "/stripe",
         StripeWebhookView.as_view(),
         name="stripe-webhook",
+    ),
+    path(
+    "/payment-methods/landlord",
+        LandlordPaymentMethodListView.as_view(),
+        name="landlord-payment-method-list",
     ),
 ]

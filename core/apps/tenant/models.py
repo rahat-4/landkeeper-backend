@@ -18,7 +18,18 @@ from common.models import CreatedAtUpdatedAtBaseModel, DocumentFile
 
 class PaymentMethod(CreatedAtUpdatedAtBaseModel):
     tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="payment_methods"
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="payment_methods",
+        null=True,
+        blank=True,
+    )
+    organisation = models.ForeignKey(
+        "organisation.Organisation",
+        on_delete=models.CASCADE,
+        related_name="payment_methods",
+        null=True,
+        blank=True,
     )
     provider = models.CharField(max_length=20, choices=PaymentProviderChoices.choices)
     method_type = models.CharField(
@@ -43,10 +54,21 @@ class PaymentMethod(CreatedAtUpdatedAtBaseModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["tenant", "provider", "is_default"]),
+            models.Index(fields=["organisation", "provider", "is_default"]),  # added
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                        models.Q(tenant__isnull=False, organisation__isnull=True)
+                        | models.Q(tenant__isnull=True, organisation__isnull=False)
+                ),
+                name="payment_method_exactly_one_owner",
+            )
         ]
 
     def __str__(self):
-        return f"{self.tenant} - {self.get_method_type_display()} ({self.status})"
+        owner = self.tenant or self.organisation
+        return f"{owner} - {self.get_method_type_display()} ({self.status})"
 
 
 class RentPayment(CreatedAtUpdatedAtBaseModel):

@@ -15,6 +15,7 @@ from rest_framework.generics import ListAPIView, CreateAPIView, RetrieveAPIView
 from rest_framework import status
 from rest_framework.response import Response
 
+from api.serializers.tenants import PaymentMethodSerializer
 from apps.organisation.models import (
     Organisation,
     OrganisationSubscription,
@@ -22,6 +23,7 @@ from apps.organisation.models import (
 )
 from apps.organisation.stripe_service import create_subscription_with_client_secret
 from apps.subscription.models import SubscriptionPlan
+from apps.tenant.models import PaymentMethod
 
 from common.permission import IsLandlord
 
@@ -107,6 +109,13 @@ class SelectSubscriptionView(CreateAPIView):
                 },
             )
 
+        if payment_method_id:
+            from apps.organisation.stripe_service import sync_payment_method_to_organisation
+            try:
+                sync_payment_method_to_organisation(organisation, payment_method_id)
+            except stripe.error.StripeError:
+                pass
+
         return Response(
             {
                 "message": "Use client_secret with Stripe Elements to confirm payment.",
@@ -120,7 +129,6 @@ class SelectSubscriptionView(CreateAPIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 class SubscriptionStatusView(RetrieveAPIView):
     serializer_class = OrganisationSubscriptionStatusSerializer
@@ -427,3 +435,15 @@ class StripeWebhookView(APIView):
         OrganisationSubscription.objects.filter(
             stripe_subscription_id=subscription_id
         ).update(status=(OrganisationSubscription.Status.PAST_DUE))
+
+
+
+class LandlordPaymentMethodListView(ListAPIView):
+    serializer_class = PaymentMethodSerializer
+    permission_classes = [IsLandlord]
+
+    def get_queryset(self):
+        organisation = self.request.user.get_organisation()
+        if not organisation:
+            return PaymentMethod.objects.none()
+        return PaymentMethod.objects.filter(organisation=organisation)

@@ -1,6 +1,7 @@
 import stripe
 from django.conf import settings
 from django.db import transaction
+from apps.tenant.models import PaymentMethod, PaymentMethodStatusChoices, PaymentProviderChoices
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -102,6 +103,31 @@ def create_subscription_with_client_secret(
     )
 
     return subscription
+
+def sync_payment_method_to_organisation(organisation, payment_method_id, set_default=True):
+    pm = stripe.PaymentMethod.retrieve(payment_method_id)
+    card = getattr(pm, "card", None)
+
+    with transaction.atomic():
+        if set_default:
+            PaymentMethod.objects.filter(
+                organisation=organisation, provider=PaymentProviderChoices.STRIPE
+            ).update(is_default=False)
+
+        obj, _created = PaymentMethod.objects.update_or_create(
+            organisation=organisation,
+            provider=PaymentProviderChoices.STRIPE,
+            provider_payment_method_id=pm.id,
+            defaults={
+                "method_type": "CARD",
+                "provider_customer_id": getattr(pm, "customer", None),
+                "status": PaymentMethodStatusChoices.ACTIVE,
+                "is_default": set_default,
+                "card_brand": getattr(card, "brand", None) if card else None,
+                "card_last4": getattr(card, "last4", None) if card else None,
+            },
+        )
+    return obj
 
 def cancel_subscription(stripe_subscription_id, at_period_end=True):
     return stripe.Subscription.modify(
