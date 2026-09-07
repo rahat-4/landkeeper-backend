@@ -20,7 +20,7 @@ from apps.organisation.models import (
     OrganisationSubscription,
     ProcessedWebhookEvent,
 )
-from apps.organisation.stripe_service import create_checkout_session
+from apps.organisation.stripe_service import create_subscription_with_client_secret
 from apps.subscription.models import SubscriptionPlan
 
 from common.permission import IsLandlord
@@ -81,9 +81,11 @@ class SelectSubscriptionView(CreateAPIView):
 
         idempotency_key = str(uuid.uuid4())
 
+        payment_method_id = serializer.validated_data.get("payment_method_id")
+
         try:
-            session = create_checkout_session(
-                organisation, request.user, plan, idempotency_key
+            subscription_obj = create_subscription_with_client_secret(
+                organisation, request.user, plan, idempotency_key, payment_method=payment_method_id
             )
         except stripe.error.StripeError as exc:
             return Response(
@@ -93,20 +95,22 @@ class SelectSubscriptionView(CreateAPIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        client_secret = subscription_obj.latest_invoice.confirmation_secret.client_secret
+
         with transaction.atomic():
             subscription, _created = OrganisationSubscription.objects.update_or_create(
                 organisation=organisation,
                 defaults={
                     "plan": plan,
                     "status": OrganisationSubscription.Status.PENDING,
-                    "stripe_checkout_session_id": session.id,
+                    "stripe_subscription_id": subscription_obj.id,
                 },
             )
 
         return Response(
             {
-                "message": "Redirect the landlord to checkout_url to complete payment.",
-                "checkout_url": session.url,
+                "message": "Use client_secret with Stripe Elements to confirm payment.",
+                "client_secret": client_secret,
                 "subscription": {
                     "plan": plan.name,
                     "plan_type": plan.plan_type,
@@ -154,9 +158,6 @@ def _get_nested(obj, *keys, default=None):
 
 
 def _stripe_timestamp_to_datetime(timestamp):
-    """
-    Convert Stripe Unix timestamp to timezone-aware datetime.
-    """
     if not timestamp:
         return None
 

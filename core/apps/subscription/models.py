@@ -57,7 +57,6 @@ class SubscriptionPlan(CreatedAtUpdatedAtBaseModel):
         blank=True,
     )
     stripe_product_id = models.CharField(max_length=255, blank=True, null=True)
-    stripe_price_id = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ["monthly_price"]

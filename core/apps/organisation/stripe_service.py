@@ -21,19 +21,39 @@ def get_or_create_stripe_customer(organisation, user):
         return customer.id
 
 
-def create_checkout_session(organisation, user, plan, idempotency_key=None):
-    if not plan.stripe_price_id:
-        raise ValueError(
-            f"SubscriptionPlan '{plan.name}' has no stripe_price_id configured."
-        )
+def get_or_create_stripe_product(plan):
+    if plan.stripe_product_id:
+        return plan.stripe_product_id
 
+    product = stripe.Product.create(
+        name=plan.name,
+        metadata={"plan_id": str(plan.id)},
+    )
+    plan.stripe_product_id = product.id
+    plan.save(update_fields=["stripe_product_id"])
+    return product.id
+
+
+def create_checkout_session(organisation, user, plan, idempotency_key=None):
     customer_id = get_or_create_stripe_customer(organisation, user)
 
     return stripe.checkout.Session.create(
         customer=customer_id,
         mode="subscription",
         payment_method_types=["card"],
-        line_items=[{"price": plan.stripe_price_id, "quantity": 1}],
+        line_items=[
+            {
+                "price_data": {
+                    "currency": "gbp",
+                    "unit_amount": int(plan.monthly_price * 100),
+                    "recurring": {"interval": "month"},
+                    "product_data": {
+                        "name": plan.name,
+                    },
+                },
+                "quantity": 1,
+            }
+        ],
         success_url=settings.FRONTEND_PAYMENT_SUCCESS_URL
         + "?session_id={CHECKOUT_SESSION_ID}",
         cancel_url=settings.FRONTEND_PAYMENT_CANCEL_URL,
@@ -47,6 +67,41 @@ def create_checkout_session(organisation, user, plan, idempotency_key=None):
         idempotency_key=idempotency_key,
     )
 
+
+def create_subscription_with_client_secret(
+    organisation, user, plan, idempotency_key=None, payment_method=None
+):
+    customer_id = get_or_create_stripe_customer(organisation, user)
+    product_id = get_or_create_stripe_product(plan)
+
+    if payment_method:
+        stripe.PaymentMethod.attach(payment_method, customer=customer_id)
+        stripe.Customer.modify(
+            customer_id,
+            invoice_settings={"default_payment_method": payment_method},
+        )
+
+    subscription = stripe.Subscription.create(
+        customer=customer_id,
+        items=[
+            {
+                "price_data": {
+                    "currency": "gbp",
+                    "unit_amount": int(plan.monthly_price * 100),
+                    "recurring": {"interval": "month"},
+                    "product": product_id,
+                },
+            }
+        ],
+        default_payment_method=payment_method if payment_method else None,
+        payment_behavior="default_incomplete" if not payment_method else "error_if_incomplete",
+        payment_settings={"save_default_payment_method": "on_subscription"},
+        expand=["latest_invoice.confirmation_secret"],
+        metadata={"organisation_id": str(organisation.id), "plan_id": str(plan.id)},
+        idempotency_key=idempotency_key,
+    )
+
+    return subscription
 
 def cancel_subscription(stripe_subscription_id, at_period_end=True):
     return stripe.Subscription.modify(

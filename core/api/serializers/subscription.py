@@ -38,13 +38,13 @@ class SelectSubscriptionSerializer(serializers.Serializer):
         slug_field="plan_type",
         queryset=SubscriptionPlan.objects.filter(is_active=True),
     )
+    payment_method_id = serializers.CharField(required=False, allow_blank=True)
 
     def validate_plan(self, plan):
         if not plan.is_active:
             raise serializers.ValidationError(
                 "This subscription plan is not available."
             )
-
         return plan
 
 
