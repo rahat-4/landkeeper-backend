@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
-from subscription.models import SubscriptionFeature, SubscriptionPlan
-
+from apps.subscription.models import SubscriptionFeature, SubscriptionPlan
+from apps.subscription.enums import PlanType
 
 FEATURES = [
     {
@@ -84,7 +84,7 @@ FEATURES = [
 
 PLANS = [
     {
-        "plan_type": SubscriptionPlan.PlanType.BASIC,
+        "plan_type": PlanType.BASIC,
         "name": "Basic",
         "monthly_price": "12.99",
         "max_properties": 3,
@@ -103,7 +103,7 @@ PLANS = [
         ],
     },
     {
-        "plan_type": SubscriptionPlan.PlanType.STANDARD,
+        "plan_type": PlanType.STANDARD,
         "name": "Standard",
         "monthly_price": "29.99",
         "max_properties": 15,
@@ -126,7 +126,7 @@ PLANS = [
         ],
     },
     {
-        "plan_type": SubscriptionPlan.PlanType.PREMIUM,
+        "plan_type": PlanType.PREMIUM,
         "name": "Premium",
         "monthly_price": "59.99",
         "max_properties": 100,
