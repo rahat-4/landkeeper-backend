@@ -4,7 +4,7 @@ from django.db import transaction
 from decimal import Decimal
 
 from apps.organisation.enums import OrganisationSubscriptionStatus
-from apps.organisation.models import Organisation
+from apps.organisation.models import Organisation, OrganisationSubscription
 from apps.subscription.enums import PaymentTransactionStatus
 from apps.subscription.models import PaymentCard, PaymentTransaction
 
@@ -223,6 +223,17 @@ def create_subscription_with_client_secret(
         stripe_subscription = stripe.Subscription.create(
             **subscription_params,
         )
+
+    # CREATE / UPDATE LOCAL SUBSCRIPTION
+    OrganisationSubscription.objects.update_or_create(
+        organisation=organisation,
+        defaults={
+            "plan": plan,
+            "status": OrganisationSubscriptionStatus.PENDING,
+            "stripe_subscription_id": stripe_subscription.id,
+            "auto_renew": True,
+        },
+    )
 
     return {
         "subscription_id": stripe_subscription.id,
