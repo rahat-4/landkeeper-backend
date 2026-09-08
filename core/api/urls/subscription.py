@@ -1,11 +1,15 @@
 from django.urls import path
 
 from api.views.subscription import (
-    SubscriptionPlanListView,
     SelectSubscriptionView,
-    SubscriptionStatusView,
     StripeWebhookView,
-    LandlordPaymentMethodListView,
+    SubscriptionPlanListView,
+    SubscriptionStatusView,
+    LandlordPaymentCardListAPIView,
+    LandlordPaymentCardDeleteAPIView,
+    LandlordBillingHistoryAPIView,
+    LandlordSubscriptionAPIView,
+    LandlordSubscriptionValidationAPIView
 )
 
 urlpatterns = [
@@ -20,18 +24,38 @@ urlpatterns = [
         name="select-subscription",
     ),
     path(
-        "/status",
-        SubscriptionStatusView.as_view(),
-        name="subscription-status",
-    ),
-    path(
         "/stripe",
         StripeWebhookView.as_view(),
         name="stripe-webhook",
     ),
     path(
-    "/payment-methods/landlord",
-        LandlordPaymentMethodListView.as_view(),
-        name="landlord-payment-method-list",
+        "/status",
+        SubscriptionStatusView.as_view(),
+        name="subscription-status",
+    ),
+    path(
+        "/cards",
+        LandlordPaymentCardListAPIView.as_view(),
+        name="landlord-payment-card-list",
+    ),
+    path(
+        "cards/<uuid:alias>",
+        LandlordPaymentCardDeleteAPIView.as_view(),
+        name="landlord-payment-card-delete",
+    ),
+    path(
+        "/billing-history",
+        LandlordBillingHistoryAPIView.as_view(),
+        name="landlord-billing-history",
+    ),
+    path(
+        "/subscription",
+        LandlordSubscriptionAPIView.as_view(),
+        name="landlord-subscription",
+    ),
+    path(
+        "/subscription/validation",
+        LandlordSubscriptionValidationAPIView.as_view(),
+        name="landlord-subscription-validation",
     ),
 ]

@@ -35,6 +35,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
         fields = [
             "alias",
             "tenant",
+            "organisation",
             "provider",
             "method_type",
             "provider_customer_id",
@@ -50,6 +51,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "alias",
             "tenant",
+            "organisation",
             "provider",
             "provider_customer_id",
             "provider_mandate_id",
@@ -61,7 +63,6 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-
 
 class RentPaymentSerializer(serializers.ModelSerializer):
     payment_method = PaymentMethodSerializer(read_only=True)

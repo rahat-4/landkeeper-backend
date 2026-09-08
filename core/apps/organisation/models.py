@@ -32,6 +32,7 @@ class Organisation(NameSlugDescriptionBaseModel):
     website = models.URLField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    # Stripe
     stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     stripe_account_id = models.CharField(max_length=64, blank=True, null=True, db_index=True)
     stripe_publishable_key = models.CharField(max_length=128, blank=True, null=True)
@@ -110,24 +111,15 @@ class OrganisationSubscription(CreatedAtUpdatedAtBaseModel):
     stripe_checkout_session_id = models.CharField(
         max_length=255, blank=True, null=True
     )
-    started_at = models.DateTimeField(null=True, blank=True)
-    current_period_start = models.DateTimeField(null=True, blank=True)
-    current_period_end = models.DateTimeField(null=True, blank=True)
-    cancelled_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+    next_billing_date = models.DateTimeField(null=True, blank=True)
+
+    # Auto-renewal
+    auto_renew = models.BooleanField(default=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    notes = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.organisation} - {self.plan}"
-
-
-class ProcessedWebhookEvent(CreatedAtUpdatedAtBaseModel):
-    stripe_event_id = models.CharField(max_length=255, unique=True, db_index=True)
-    event_type = models.CharField(max_length=100)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.event_type} ({self.stripe_event_id})"

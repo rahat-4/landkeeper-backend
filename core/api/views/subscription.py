@@ -1,42 +1,115 @@
-import uuid
-
+from django.db import transaction
+from django.http import HttpResponse
+from django.utils import timezone
+from django.views import View
 import stripe
 from django.conf import settings
-from django.db import transaction
-from django.utils import timezone
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-from datetime import timezone as dt_timezone
-
-from rest_framework.exceptions import NotFound
+from rest_framework.generics import (
+    ListAPIView,
+    DestroyAPIView,
+    RetrieveUpdateAPIView
+)
 from rest_framework.views import APIView
-from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.generics import ListAPIView, CreateAPIView, RetrieveAPIView
 from rest_framework import status
 from rest_framework.response import Response
 
-from api.serializers.tenants import PaymentMethodSerializer
-from apps.organisation.models import (
-    Organisation,
-    OrganisationSubscription,
-    ProcessedWebhookEvent,
-)
-from apps.organisation.stripe_service import create_subscription_with_client_secret
-from apps.subscription.models import SubscriptionPlan
-from apps.tenant.models import PaymentMethod
-
-from common.permission import IsLandlord
-
 from api.serializers.subscription import (
     SubscriptionPlanSerializer,
-    SelectSubscriptionSerializer,
-    OrganisationSubscriptionStatusSerializer,
+    PaymentCardSerializer,
+    BillingHistorySerializer,
+    OrganisationSubscriptionStatusSerializer
 )
+from apps.organisation.stripe_service import (
+    handle_payment_success,
+    handle_payment_failed,
+    create_subscription_with_client_secret,
+)
+from apps.subscription.models import (
+    SubscriptionPlan,
+    PaymentCard,
+    PaymentTransaction
+)
+from apps.organisation.models import OrganisationSubscription
+from common.permission import IsLandlord
+
+
+class SelectSubscriptionView(APIView):
+
+    def post(self, request):
+        plan_id = request.data.get("plan_id")
+
+        if not plan_id:
+            return Response(
+                {"detail": "plan_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            plan = SubscriptionPlan.objects.get(
+                alias=plan_id,
+                is_active=True,
+            )
+        except SubscriptionPlan.DoesNotExist:
+            return Response(
+                {"detail": "Subscription plan not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        organisation = request.user.get_organisation()
+
+        result = create_subscription_with_client_secret(
+            organisation=organisation,
+            user=request.user,
+            plan=plan,
+        )
+
+        return Response(
+            {
+                "subscription_id": result["subscription_id"],
+                "client_secret": result["client_secret"],
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+
+class StripeWebhookView(View):
+
+    def post(self, request, *args, **kwargs):
+
+        payload = request.body
+        signature = request.META.get(
+            "HTTP_STRIPE_SIGNATURE"
+        )
+
+        try:
+            event = stripe.Webhook.construct_event(
+                payload,
+                signature,
+                settings.STRIPE_WEBHOOK_SECRET,
+            )
+
+        except ValueError:
+            return HttpResponse(status=400)
+
+        except stripe.error.SignatureVerificationError:
+            return HttpResponse(status=400)
+
+        event_type = event["type"]
+        data = event["data"]["object"]
+
+        if event_type == "payment_intent.succeeded":
+            handle_payment_success(data)
+
+        elif event_type == "payment_intent.payment_failed":
+            handle_payment_failed(data)
+
+        return HttpResponse(status=200)
 
 
 class SubscriptionPlanListView(ListAPIView):
     serializer_class = SubscriptionPlanSerializer
-    permission_classes = []
+    # permission_classes = []
 
     def get_queryset(self):
         return (
@@ -46,404 +119,277 @@ class SubscriptionPlanListView(ListAPIView):
         )
 
 
-class SelectSubscriptionView(CreateAPIView):
-    serializer_class = SelectSubscriptionSerializer
-    permission_classes = [IsLandlord]
+class SubscriptionStatusView(APIView):
 
-    LOCKED_STATUSES = {
-        OrganisationSubscription.Status.ACTIVE,
-        OrganisationSubscription.Status.TRIALING,
-        OrganisationSubscription.Status.PAST_DUE,
-    }
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        plan = serializer.validated_data["plan"]
+    def get(self, request):
         organisation = request.user.get_organisation()
 
-        if not organisation:
-            return Response(
-                {"detail": "Organisation not found."},
-                status=status.HTTP_404_NOT_FOUND,
+        try:
+            subscription = (
+                OrganisationSubscription.objects
+                .select_related("plan")
+                .get(organisation=organisation)
             )
 
-        existing = getattr(organisation, "subscription", None)
-        if existing and existing.status in self.LOCKED_STATUSES:
+        except OrganisationSubscription.DoesNotExist:
             return Response(
                 {
-                    "detail": (
-                        "This organisation already has a subscription. "
-                        "Use the plan-change endpoint or billing portal to switch plans."
-                    )
+                    "has_subscription": False,
+                    "subscription": None,
                 },
-                status=status.HTTP_409_CONFLICT,
+                status=status.HTTP_200_OK,
             )
-
-        idempotency_key = str(uuid.uuid4())
-
-        payment_method_id = serializer.validated_data.get("payment_method_id")
-
-        try:
-            subscription_obj = create_subscription_with_client_secret(
-                organisation, request.user, plan, idempotency_key, payment_method=payment_method_id
-            )
-        except stripe.error.StripeError as exc:
-            return Response(
-                {"detail": f"Payment provider error: {exc.user_message or str(exc)}"},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        client_secret = subscription_obj.latest_invoice.confirmation_secret.client_secret
-
-        with transaction.atomic():
-            subscription, _created = OrganisationSubscription.objects.update_or_create(
-                organisation=organisation,
-                defaults={
-                    "plan": plan,
-                    "status": OrganisationSubscription.Status.PENDING,
-                    "stripe_subscription_id": subscription_obj.id,
-                },
-            )
-
-        if payment_method_id:
-            from apps.organisation.stripe_service import sync_payment_method_to_organisation
-            try:
-                sync_payment_method_to_organisation(organisation, payment_method_id)
-            except stripe.error.StripeError:
-                pass
 
         return Response(
             {
-                "message": "Use client_secret with Stripe Elements to confirm payment.",
-                "client_secret": client_secret,
+                "has_subscription": True,
                 "subscription": {
-                    "plan": plan.name,
-                    "plan_type": plan.plan_type,
-                    "monthly_price": plan.monthly_price,
+                    "plan": subscription.plan.name,
+                    "plan_alias": str(subscription.plan.alias),
                     "status": subscription.status,
+                    "monthly_price": subscription.plan.monthly_price,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "next_billing_date": subscription.next_billing_date,
+                    "auto_renew": subscription.auto_renew,
+                    "cancelled_at": subscription.cancelled_at,
                 },
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_200_OK,
         )
 
-class SubscriptionStatusView(RetrieveAPIView):
+
+class LandlordPaymentCardListAPIView(APIView):
+    permission_classes = [IsLandlord]
+
+    def get(self, request):
+        organisation = request.user.get_organisation()
+
+        cards = PaymentCard.objects.filter(
+            organisation=organisation
+        ).order_by("-is_default", "-id")
+
+        serializer = PaymentCardSerializer(cards, many=True)
+
+        return Response(
+            {
+                "cards": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class LandlordPaymentCardDeleteAPIView(DestroyAPIView):
+    permission_classes = [IsLandlord]
+    lookup_field = "alias"
+    lookup_url_kwarg = "alias"
+
+    def get_queryset(self):
+        organisation = self.request.user.get_organisation()
+
+        return PaymentCard.objects.filter(
+            organisation=organisation
+        )
+
+    def perform_destroy(self, instance):
+        organisation = self.request.user.get_organisation()
+
+        was_default = instance.is_default
+
+        stripe.PaymentMethod.detach(
+            instance.stripe_payment_method_id
+        )
+
+        instance.delete()
+
+        if was_default:
+            new_default = (
+                PaymentCard.objects
+                .filter(organisation=organisation)
+                .first()
+            )
+
+            if new_default:
+                new_default.is_default = True
+                new_default.save(update_fields=["is_default"])
+
+                stripe.Customer.modify(
+                    organisation.stripe_customer_id,
+                    invoice_settings={
+                        "default_payment_method": (
+                            new_default.stripe_payment_method_id
+                        )
+                    },
+                )
+
+class LandlordBillingHistoryAPIView(ListAPIView):
+    serializer_class = BillingHistorySerializer
+    permission_classes = [IsLandlord]
+
+    def get_queryset(self):
+        organisation = self.request.user.get_organisation()
+
+        return (
+            PaymentTransaction.objects
+            .filter(
+                organisation=organisation,
+            )
+            .select_related(
+                "subscription",
+                "subscription__plan",
+            )
+            .order_by("-created_at")
+        )
+
+class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
     serializer_class = OrganisationSubscriptionStatusSerializer
     permission_classes = [IsLandlord]
 
     def get_object(self):
         organisation = self.request.user.get_organisation()
-        if not organisation or not hasattr(organisation, "subscription"):
-            raise NotFound("No subscription found for this organisation.")
-        return organisation.subscription
 
-
-def _get_nested(obj, *keys, default=None):
-    """
-    Safely get nested values from StripeObject/dict.
-    """
-    current = obj
-
-    for key in keys:
-        if current is None:
-            return default
-
-        try:
-            current = current.get(key, default)
-        except AttributeError:
-            try:
-                current = current[key]
-            except (KeyError, TypeError):
-                return default
-
-        if current is None:
-            return default
-
-    return current
-
-
-def _stripe_timestamp_to_datetime(timestamp):
-    if not timestamp:
-        return None
-
-    return timezone.datetime.fromtimestamp(
-        timestamp,
-        tz=dt_timezone.utc,
-    )
-
-
-@method_decorator(csrf_exempt, name="dispatch")
-class StripeWebhookView(APIView):
-
-    permission_classes = []
-    authentication_classes = []
-
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "webhook"
-
-    def post(self, request, *args, **kwargs):
-
-        payload = request.body
-        sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
-        try:
-            event = stripe.Webhook.construct_event(
-                payload,
-                sig_header,
-                settings.STRIPE_WEBHOOK_SECRET,
-            )
-
-        except ValueError:
-            return Response(
-                {"detail": "Invalid payload."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        except stripe.error.SignatureVerificationError:
-            return Response(
-                {"detail": "Invalid signature."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        event_id = event["id"]
-
-        _, created = ProcessedWebhookEvent.objects.get_or_create(
-            stripe_event_id=event_id,
-            defaults={
-                "event_type": event["type"],
-            },
-        )
-
-        if not created:
-            return Response(status=status.HTTP_200_OK)
-
-        handlers = {
-            "checkout.session.completed": self._checkout_completed,
-            "checkout.session.expired": self._checkout_expired,
-            "customer.subscription.created": self._subscription_updated,
-            "customer.subscription.updated": self._subscription_updated,
-            "customer.subscription.deleted": self._subscription_cancelled,
-            "invoice.payment_failed": self._payment_failed,
-        }
-
-        handler = handlers.get(event["type"])
-
-        if handler:
-
-            try:
-                handler(event["data"]["object"])
-
-            except stripe.error.StripeError:
-
-                ProcessedWebhookEvent.objects.filter(stripe_event_id=event_id).delete()
-
-                return Response(status=status.HTTP_502_BAD_GATEWAY)
-
-            except Exception:
-
-                # Delete event so Stripe can retry it
-                ProcessedWebhookEvent.objects.filter(stripe_event_id=event_id).delete()
-
-                raise
-
-        return Response(status=status.HTTP_200_OK)
-
-    def _checkout_completed(self, session):
-
-        organisation_id = _get_nested(
-            session,
-            "metadata",
-            "organisation_id",
-        )
-
-        plan_id = _get_nested(
-            session,
-            "metadata",
-            "plan_id",
-        )
-
-        stripe_subscription_id = _get_nested(
-            session,
-            "subscription",
-        )
-
-        if not (organisation_id and plan_id and stripe_subscription_id):
-            return
-
-        try:
-
-            organisation = Organisation.objects.get(id=organisation_id)
-
-            plan = SubscriptionPlan.objects.get(id=plan_id)
-
-        except (
-            Organisation.DoesNotExist,
-            SubscriptionPlan.DoesNotExist,
-        ):
-            return
-
-        stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
-
-        period_start = _get_nested(
-            stripe_sub,
-            "current_period_start",
-        )
-
-        period_end = _get_nested(
-            stripe_sub,
-            "current_period_end",
-        )
-
-        current_period_start = _stripe_timestamp_to_datetime(period_start)
-
-        current_period_end = _stripe_timestamp_to_datetime(period_end)
-
-        existing = OrganisationSubscription.objects.filter(
-            organisation=organisation
-        ).first()
-
-        started_at = (
-            existing.started_at if existing and existing.started_at else timezone.now()
-        )
-
-        defaults = {
-            "plan": plan,
-            "status": (OrganisationSubscription.Status.ACTIVE),
-            "stripe_subscription_id": (stripe_subscription_id),
-            "stripe_checkout_session_id": (_get_nested(session, "id")),
-            "started_at": started_at,
-            "cancelled_at": None,
-        }
-
-        if current_period_start:
-            defaults["current_period_start"] = current_period_start
-
-        if current_period_end:
-            defaults["current_period_end"] = current_period_end
-
-        OrganisationSubscription.objects.update_or_create(
+        return OrganisationSubscription.objects.select_related(
+            "plan",
+        ).get(
             organisation=organisation,
-            defaults=defaults,
         )
 
-    def _checkout_expired(self, session):
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            subscription = self.get_object()
 
-        organisation_id = _get_nested(
-            session,
-            "metadata",
-            "organisation_id",
-        )
-
-        if not organisation_id:
-            return
-
-        OrganisationSubscription.objects.filter(
-            organisation_id=organisation_id,
-            status=(OrganisationSubscription.Status.PENDING),
-            stripe_checkout_session_id=(_get_nested(session, "id")),
-        ).update(status=(OrganisationSubscription.Status.EXPIRED))
-
-    def _subscription_updated(self, sub_obj):
-
-        stripe_subscription_id = _get_nested(
-            sub_obj,
-            "id",
-        )
-
-        if not stripe_subscription_id:
-            return
-
-        try:
-
-            org_sub = OrganisationSubscription.objects.get(
-                stripe_subscription_id=(stripe_subscription_id)
+            auto_renew = serializer.validated_data.get(
+                "auto_renew",
+                subscription.auto_renew,
             )
 
-        except OrganisationSubscription.DoesNotExist:
-            return
-
-        status_map = {
-            "trialing": OrganisationSubscription.Status.TRIALING,
-            "active": OrganisationSubscription.Status.ACTIVE,
-            "past_due": OrganisationSubscription.Status.PAST_DUE,
-            "canceled": OrganisationSubscription.Status.CANCELLED,
-            "unpaid": OrganisationSubscription.Status.PAST_DUE,
-            "incomplete_expired": OrganisationSubscription.Status.EXPIRED,
-        }
-
-        stripe_status = _get_nested(
-            sub_obj,
-            "status",
-        )
-
-        if stripe_status:
-
-            org_sub.status = status_map.get(
-                stripe_status,
-                org_sub.status,
+            subscription.auto_renew = auto_renew
+            subscription.save(
+                update_fields=["auto_renew"]
             )
 
-        period_start = _get_nested(
-            sub_obj,
-            "current_period_start",
-        )
-
-        period_end = _get_nested(
-            sub_obj,
-            "current_period_end",
-        )
-
-        if period_start:
-
-            org_sub.current_period_start = _stripe_timestamp_to_datetime(period_start)
-
-        if period_end:
-
-            org_sub.current_period_end = _stripe_timestamp_to_datetime(period_end)
-
-        org_sub.save()
-
-    def _subscription_cancelled(self, sub_obj):
-
-        stripe_subscription_id = _get_nested(
-            sub_obj,
-            "id",
-        )
-
-        if not stripe_subscription_id:
-            return
-
-        OrganisationSubscription.objects.filter(
-            stripe_subscription_id=(stripe_subscription_id)
-        ).update(
-            status=(OrganisationSubscription.Status.CANCELLED),
-            cancelled_at=timezone.now(),
-        )
-
-    def _payment_failed(self, invoice_obj):
-
-        subscription_id = _get_nested(
-            invoice_obj,
-            "subscription",
-        )
-
-        if not subscription_id:
-            return
-
-        OrganisationSubscription.objects.filter(
-            stripe_subscription_id=subscription_id
-        ).update(status=(OrganisationSubscription.Status.PAST_DUE))
-
-
-
-class LandlordPaymentMethodListView(ListAPIView):
-    serializer_class = PaymentMethodSerializer
+class LandlordSubscriptionValidationAPIView(APIView):
     permission_classes = [IsLandlord]
 
-    def get_queryset(self):
-        organisation = self.request.user.get_organisation()
-        if not organisation:
-            return PaymentMethod.objects.none()
-        return PaymentMethod.objects.filter(organisation=organisation)
+    def post(self, request):
+        organisation = request.user.get_organisation()
+        plan_alias = request.data.get("plan")
+
+        if not plan_alias:
+            return Response(
+                {"error": "plan is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get new plan
+        try:
+            new_plan = SubscriptionPlan.objects.get(
+                alias=plan_alias,
+                is_active=True,
+            )
+        except SubscriptionPlan.DoesNotExist:
+            return Response(
+                {"error": "Invalid subscription plan"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get current subscription
+        try:
+            current_subscription = (
+                OrganisationSubscription.objects
+                .select_related("plan")
+                .get(organisation=organisation)
+            )
+        except OrganisationSubscription.DoesNotExist:
+            return Response(
+                {
+                    "allowed": True,
+                    "message": "No active subscription. Plan selection allowed.",
+                    "plan": {
+                        "alias": str(new_plan.alias),
+                        "name": new_plan.name,
+                        "price": str(new_plan.monthly_price),
+                        "max_properties": new_plan.max_properties,
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        current_plan = current_subscription.plan
+
+        # Same plan
+        if current_plan.id == new_plan.id:
+            return Response(
+                {
+                    "allowed": False,
+                    "message": "You are already subscribed to this plan.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Prevent plan change before current billing period ends
+        now = timezone.now()
+
+        if (
+            current_subscription.next_billing_date
+            and now < current_subscription.next_billing_date
+        ):
+            return Response(
+                {
+                    "allowed": False,
+                    "message": (
+                        "You cannot change your subscription plan "
+                        "before the current billing period ends."
+                    ),
+                    "current_plan": current_plan.name,
+                    "current_period_end": (
+                        current_subscription.next_billing_date
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Downgrade validation
+        current_property_count = organisation.properties.count()
+
+        downgrade_errors = []
+
+        if (
+            new_plan.monthly_price
+            < current_plan.monthly_price
+        ):
+            if new_plan.max_properties < current_property_count:
+                excess = (
+                    current_property_count
+                    - new_plan.max_properties
+                )
+
+                downgrade_errors.append(
+                    f"{current_property_count} properties active — "
+                    f"new plan allows {new_plan.max_properties}. "
+                    f"Please remove {excess} properties first."
+                )
+
+        if downgrade_errors:
+            return Response(
+                {
+                    "allowed": False,
+                    "message": f"Cannot switch to '{new_plan.name}'.",
+                    "errors": downgrade_errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "allowed": True,
+                "message": "Plan change allowed.",
+                "plan": {
+                    "alias": str(new_plan.alias),
+                    "name": new_plan.name,
+                    "price": str(new_plan.monthly_price),
+                    "max_properties": new_plan.max_properties,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -18,49 +18,34 @@ from common.models import CreatedAtUpdatedAtBaseModel, DocumentFile
 
 class PaymentMethod(CreatedAtUpdatedAtBaseModel):
     tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="payment_methods",
-        null=True,
-        blank=True,
+        Tenant, on_delete=models.CASCADE, related_name="payment_methods", null=True, blank=True,
     )
     organisation = models.ForeignKey(
-        "organisation.Organisation",
-        on_delete=models.CASCADE,
-        related_name="payment_methods",
-        null=True,
-        blank=True,
+        "organisation.Organisation", on_delete=models.CASCADE, related_name="payment_methods", null=True, blank=True,
     )
     provider = models.CharField(max_length=20, choices=PaymentProviderChoices.choices)
-    method_type = models.CharField(
-        max_length=20, choices=PaymentMethodTypeChoices.choices
-    )
+    method_type = models.CharField(max_length=20, choices=PaymentMethodTypeChoices.choices)
     provider_customer_id = models.CharField(max_length=128, blank=True, null=True)
-    provider_mandate_id = models.CharField(max_length=128, blank=True, null=True)  # GoCardless
-    provider_payment_method_id = models.CharField(
-        max_length=128, blank=True, null=True
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=PaymentMethodStatusChoices.choices,
-        default=PaymentMethodStatusChoices.PENDING,
-    )
+    provider_mandate_id = models.CharField(max_length=128, blank=True, null=True)
+    provider_payment_method_id = models.CharField(max_length=128, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=PaymentMethodStatusChoices.choices, default=PaymentMethodStatusChoices.PENDING)
     is_default = models.BooleanField(default=True)
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
     card_brand = models.CharField(max_length=32, blank=True, null=True)
+    card_exp_month = models.PositiveSmallIntegerField(blank=True, null=True)
+    card_exp_year = models.PositiveSmallIntegerField(blank=True, null=True)
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["tenant", "provider", "is_default"]),
-            models.Index(fields=["organisation", "provider", "is_default"]),  # added
+            models.Index(fields=["organisation", "provider", "is_default"]),
         ]
         constraints = [
             models.CheckConstraint(
                 condition=(
-                        models.Q(tenant__isnull=False, organisation__isnull=True)
-                        | models.Q(tenant__isnull=True, organisation__isnull=False)
+                    models.Q(tenant__isnull=False, organisation__isnull=True)
+                    | models.Q(tenant__isnull=True, organisation__isnull=False)
                 ),
                 name="payment_method_exactly_one_owner",
             )

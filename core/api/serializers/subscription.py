@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.organisation.models import OrganisationSubscription
-from apps.subscription.models import SubscriptionFeature, SubscriptionPlan
+from apps.subscription.models import SubscriptionFeature, SubscriptionPlan, PaymentCard, PaymentTransaction
 
 
 class SubscriptionFeatureSerializer(serializers.ModelSerializer):
@@ -24,12 +24,72 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         model = SubscriptionPlan
         fields = [
             "alias",
-            "name",
+             "name",
             "plan_type",
             "monthly_price",
             "max_properties",
             "referral_discount_percent",
+            "description",
             "features",
+            "is_active",
+        ]
+
+class PaymentCardSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentCard
+        fields = [
+            "id",
+            "stripe_payment_method_id",
+            "last_four",
+            "card_brand",
+            "expiry_month",
+            "expiry_year",
+            "is_default",
+        ]
+        read_only_fields = fields
+
+
+class BillingHistorySerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(
+        source="subscription.plan.name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = PaymentTransaction
+        fields = [
+            "alias",
+            "plan_name",
+            "amount",
+            "currency",
+            "status",
+            "attempt_number",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+
+    class Meta:
+        model = OrganisationSubscription
+        fields = [
+            "status",
+            "plan",
+            "start_date",
+            "end_date",
+            "next_billing_date",
+            "auto_renew",
+            "cancelled_at",
+        ]
+        read_only_fields = [
+            "status",
+            "plan",
+            "start_date",
+            "end_date",
+            "next_billing_date",
+            "cancelled_at",
         ]
 
 
@@ -46,18 +106,3 @@ class SelectSubscriptionSerializer(serializers.Serializer):
                 "This subscription plan is not available."
             )
         return plan
-
-
-class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
-    plan = SubscriptionPlanSerializer(read_only=True)
-
-    class Meta:
-        model = OrganisationSubscription
-        fields = [
-            "status",
-            "plan",
-            "started_at",
-            "current_period_start",
-            "current_period_end",
-            "cancelled_at",
-        ]
