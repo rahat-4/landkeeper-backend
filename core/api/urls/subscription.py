@@ -49,12 +49,12 @@ urlpatterns = [
         name="landlord-billing-history",
     ),
     path(
-        "/subscription",
+        "",
         LandlordSubscriptionAPIView.as_view(),
         name="landlord-subscription",
     ),
     path(
-        "/subscription/validation",
+        "/validation",
         LandlordSubscriptionValidationAPIView.as_view(),
         name="landlord-subscription-validation",
     ),

@@ -3,6 +3,8 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.views import View
 import stripe
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from django.conf import settings
 from rest_framework.generics import (
     ListAPIView,
@@ -19,6 +21,7 @@ from api.serializers.subscription import (
     BillingHistorySerializer,
     OrganisationSubscriptionStatusSerializer
 )
+from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.stripe_service import (
     handle_payment_success,
     handle_payment_failed,
@@ -73,14 +76,13 @@ class SelectSubscriptionView(APIView):
 
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(View):
 
     def post(self, request, *args, **kwargs):
 
         payload = request.body
-        signature = request.META.get(
-            "HTTP_STRIPE_SIGNATURE"
-        )
+        signature = request.META.get("HTTP_STRIPE_SIGNATURE")
 
         try:
             event = stripe.Webhook.construct_event(
@@ -277,11 +279,13 @@ class LandlordSubscriptionValidationAPIView(APIView):
 
         if not plan_alias:
             return Response(
-                {"error": "plan is required"},
+                {
+                    "allowed": False,
+                    "error": "plan is required",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get new plan
         try:
             new_plan = SubscriptionPlan.objects.get(
                 alias=plan_alias,
@@ -289,22 +293,31 @@ class LandlordSubscriptionValidationAPIView(APIView):
             )
         except SubscriptionPlan.DoesNotExist:
             return Response(
-                {"error": "Invalid subscription plan"},
+                {
+                    "allowed": False,
+                    "error": "Invalid subscription plan",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get current subscription
-        try:
-            current_subscription = (
-                OrganisationSubscription.objects
-                .select_related("plan")
-                .get(organisation=organisation)
+        current_subscription = (
+            OrganisationSubscription.objects
+            .select_related("plan")
+            .filter(
+                organisation=organisation,
+                status=OrganisationSubscriptionStatus.ACTIVE,
             )
-        except OrganisationSubscription.DoesNotExist:
+            .first()
+        )
+
+        if not current_subscription:
             return Response(
                 {
                     "allowed": True,
-                    "message": "No active subscription. Plan selection allowed.",
+                    "message": (
+                        "No active subscription. "
+                        "Plan selection allowed."
+                    ),
                     "plan": {
                         "alias": str(new_plan.alias),
                         "name": new_plan.name,
@@ -317,17 +330,18 @@ class LandlordSubscriptionValidationAPIView(APIView):
 
         current_plan = current_subscription.plan
 
-        # Same plan
         if current_plan.id == new_plan.id:
             return Response(
                 {
                     "allowed": False,
-                    "message": "You are already subscribed to this plan.",
+                    "message": (
+                        "You are already subscribed "
+                        "to this plan."
+                    ),
                 },
                 status=status.HTTP_200_OK,
             )
 
-        # Prevent plan change before current billing period ends
         now = timezone.now()
 
         if (
@@ -338,8 +352,9 @@ class LandlordSubscriptionValidationAPIView(APIView):
                 {
                     "allowed": False,
                     "message": (
-                        "You cannot change your subscription plan "
-                        "before the current billing period ends."
+                        "You cannot change your subscription "
+                        "plan before the current billing "
+                        "period ends."
                     ),
                     "current_plan": current_plan.name,
                     "current_period_end": (
@@ -349,47 +364,57 @@ class LandlordSubscriptionValidationAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Downgrade validation
-        current_property_count = organisation.properties.count()
+        current_property_count = (
+            organisation.organisation_properties.count()
+        )
 
-        downgrade_errors = []
+        current_price = current_plan.monthly_price or 0
+        new_price = new_plan.monthly_price or 0
 
-        if (
-            new_plan.monthly_price
-            < current_plan.monthly_price
-        ):
+        if new_price < current_price:
             if new_plan.max_properties < current_property_count:
                 excess = (
                     current_property_count
                     - new_plan.max_properties
                 )
 
-                downgrade_errors.append(
-                    f"{current_property_count} properties active — "
-                    f"new plan allows {new_plan.max_properties}. "
-                    f"Please remove {excess} properties first."
+                return Response(
+                    {
+                        "allowed": False,
+                        "message": (
+                            f"Cannot switch to "
+                            f"'{new_plan.name}'."
+                        ),
+                        "errors": [
+                            (
+                                f"{current_property_count} properties "
+                                f"active — new plan allows "
+                                f"{new_plan.max_properties}. "
+                                f"Please remove {excess} "
+                                f"properties first."
+                            )
+                        ],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-
-        if downgrade_errors:
-            return Response(
-                {
-                    "allowed": False,
-                    "message": f"Cannot switch to '{new_plan.name}'.",
-                    "errors": downgrade_errors,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         return Response(
             {
                 "allowed": True,
                 "message": "Plan change allowed.",
-                "plan": {
+                "current_plan": {
+                    "alias": str(current_plan.alias),
+                    "name": current_plan.name,
+                    "price": str(current_plan.monthly_price),
+                    "max_properties": current_plan.max_properties,
+                },
+                "new_plan": {
                     "alias": str(new_plan.alias),
                     "name": new_plan.name,
                     "price": str(new_plan.monthly_price),
                     "max_properties": new_plan.max_properties,
                 },
+                "current_property_count": current_property_count,
             },
             status=status.HTTP_200_OK,
         )

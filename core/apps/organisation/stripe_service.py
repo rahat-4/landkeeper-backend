@@ -2,6 +2,7 @@ import stripe
 from django.conf import settings
 from django.db import transaction
 from decimal import Decimal
+from datetime import datetime, timezone
 
 from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.models import Organisation, OrganisationSubscription
@@ -224,17 +225,51 @@ def create_subscription_with_client_secret(
             **subscription_params,
         )
 
-    # CREATE / UPDATE LOCAL SUBSCRIPTION
-    OrganisationSubscription.objects.update_or_create(
-        organisation=organisation,
-        defaults={
-            "plan": plan,
-            "status": OrganisationSubscriptionStatus.PENDING,
-            "stripe_subscription_id": stripe_subscription.id,
-            "auto_renew": True,
-        },
+    # LOCAL SUBSCRIPTION
+    local_subscription, _ = (
+        OrganisationSubscription.objects.update_or_create(
+            organisation=organisation,
+            defaults={
+                "plan": plan,
+                "status": OrganisationSubscriptionStatus.PENDING,
+                "stripe_subscription_id": stripe_subscription.id,
+                "auto_renew": True,
+            },
+        )
     )
 
+    # GET PAYMENT INTENT ID
+    invoice = stripe.Invoice.retrieve(
+        stripe_subscription.latest_invoice.id
+    )
+
+    invoice_payments = stripe.InvoicePayment.list(
+        invoice=invoice.id
+    )
+
+    payment_intent_id = None
+
+    for invoice_payment in invoice_payments.data:
+        payment = invoice_payment.payment
+
+        if payment and payment.type == "payment_intent":
+            payment_intent_id = payment.payment_intent
+            break
+
+    # LOCAL PAYMENT TRANSACTION
+
+    if payment_intent_id:
+        PaymentTransaction.objects.create(
+            organisation=organisation,
+            subscription=local_subscription,
+            amount=plan.monthly_price,
+            currency="GBP",
+            stripe_payment_intent_id=payment_intent_id,
+            status=PaymentTransactionStatus.PENDING,
+            attempt_number=1,
+        )
+
+    # RESPONSE
     return {
         "subscription_id": stripe_subscription.id,
         "client_secret": (
@@ -262,13 +297,18 @@ def create_payment_transaction(
         status=PaymentTransactionStatus.PENDING,
     )
 
-# PAYMENT SUCCESS
-def handle_payment_success(payment_intent):
 
-    customer_id = payment_intent.get("customer")
-    payment_intent_id = payment_intent.get("id")
+def handle_payment_success(payment_intent):
+    print("========== PAYMENT SUCCESS START ==========")
+
+    customer_id = payment_intent.customer
+    payment_intent_id = payment_intent.id
+
+    print("Customer:", customer_id)
+    print("PaymentIntent:", payment_intent_id)
 
     if not customer_id or not payment_intent_id:
+        print("Missing customer/payment_intent")
         return
 
     try:
@@ -276,41 +316,186 @@ def handle_payment_success(payment_intent):
             stripe_customer_id=customer_id
         )
 
+        print("Organisation:", organisation.id)
+
         payment_transaction = PaymentTransaction.objects.get(
             organisation=organisation,
             stripe_payment_intent_id=payment_intent_id,
         )
 
+        print("PaymentTransaction:", payment_transaction.id)
+
     except (
         Organisation.DoesNotExist,
         PaymentTransaction.DoesNotExist,
     ):
+        print("Organisation or PaymentTransaction NOT FOUND")
         return
 
-    payment_transaction.status = (
-        PaymentTransactionStatus.SUCCEEDED
-    )
+    payment_transaction.status = PaymentTransactionStatus.SUCCEEDED
+    payment_transaction.save(update_fields=["status"])
 
-    payment_transaction.save(
-        update_fields=["status"]
-    )
+    print("PaymentTransaction marked SUCCEEDED")
 
+    # Save payment card
+    payment_method_id = payment_intent.payment_method
+
+    print("Payment Method:", payment_method_id)
+
+    if payment_method_id:
+        payment_method = stripe.PaymentMethod.retrieve(
+            payment_method_id
+        )
+
+        card = payment_method.card
+
+        if card:
+            PaymentCard.objects.update_or_create(
+                stripe_payment_method_id=payment_method.id,
+                defaults={
+                    "organisation": organisation,
+                    "last_four": card.last4,
+                    "card_brand": card.brand,
+                    "expiry_month": card.exp_month,
+                    "expiry_year": card.exp_year,
+                    "is_default": True,
+                },
+            )
+
+            print("PaymentCard saved")
+
+    # Get subscription
     subscription = payment_transaction.subscription
 
-    subscription.status = (
-        OrganisationSubscriptionStatus.ACTIVE
+    print("Local Subscription:", subscription.id)
+    print("Current local status:", subscription.status)
+    print(
+        "Stripe Subscription ID:",
+        subscription.stripe_subscription_id,
     )
 
-    subscription.save(
-        update_fields=["status"]
+    stripe_subscription = stripe.Subscription.retrieve(
+        subscription.stripe_subscription_id
     )
+
+    print("Stripe subscription status:", stripe_subscription.status)
+
+    # Update local subscription
+    subscription.status = OrganisationSubscriptionStatus.ACTIVE
+
+    subscription.start_date = datetime.fromtimestamp(
+        stripe_subscription.start_date,
+        tz=timezone.utc,
+    )
+
+    subscription.next_billing_date = datetime.fromtimestamp(
+        stripe_subscription.current_period_end,
+        tz=timezone.utc,
+    )
+
+    subscription.auto_renew = not stripe_subscription.cancel_at_period_end
+
+    subscription.save(
+        update_fields=[
+            "status",
+            "start_date",
+            "next_billing_date",
+            "auto_renew",
+        ]
+    )
+
+    print("Subscription marked ACTIVE")
+    print("========== PAYMENT SUCCESS END ==========")
+
+
+# PAYMENT SUCCESS
+# def handle_payment_success(payment_intent):
+#     customer_id = payment_intent.customer
+#     payment_intent_id = payment_intent.id
+#
+#     if not customer_id or not payment_intent_id:
+#         return
+#
+#     try:
+#         organisation = Organisation.objects.get(
+#             stripe_customer_id=customer_id
+#         )
+#
+#         payment_transaction = PaymentTransaction.objects.get(
+#             organisation=organisation,
+#             stripe_payment_intent_id=payment_intent_id,
+#         )
+#
+#     except (
+#         Organisation.DoesNotExist,
+#         PaymentTransaction.DoesNotExist,
+#     ):
+#         return
+#
+#     # Payment successful
+#     payment_transaction.status = PaymentTransactionStatus.SUCCEEDED
+#     payment_transaction.save(update_fields=["status"])
+#
+#     # Save payment card
+#     payment_method_id = payment_intent.payment_method
+#
+#     if payment_method_id:
+#         payment_method = stripe.PaymentMethod.retrieve(
+#             payment_method_id
+#         )
+#
+#         card = payment_method.card
+#
+#         if card:
+#             PaymentCard.objects.update_or_create(
+#                 stripe_payment_method_id=payment_method.id,
+#                 defaults={
+#                     "organisation": organisation,
+#                     "last_four": card.last4,
+#                     "card_brand": card.brand,
+#                     "expiry_month": card.exp_month,
+#                     "expiry_year": card.exp_year,
+#                     "is_default": True,
+#                 },
+#             )
+#
+#     # Get subscription
+#     subscription = payment_transaction.subscription
+#
+#     # Get Stripe subscription
+#     stripe_subscription = stripe.Subscription.retrieve(
+#         subscription.stripe_subscription_id
+#     )
+#
+#     # Update local subscription
+#     subscription.status = OrganisationSubscriptionStatus.ACTIVE
+#
+#     subscription.start_date = datetime.fromtimestamp(
+#         stripe_subscription.start_date,
+#         tz=timezone.utc,
+#     )
+#
+#     subscription.next_billing_date = datetime.fromtimestamp(
+#         stripe_subscription.current_period_end,
+#         tz=timezone.utc,
+#     )
+#
+#     subscription.auto_renew = not stripe_subscription.cancel_at_period_end
+#
+#     subscription.save(
+#         update_fields=[
+#             "status",
+#             "start_date",
+#             "next_billing_date",
+#             "auto_renew",
+#         ]
+#     )
 
 
 # PAYMENT FAILED
 def handle_payment_failed(payment_intent):
-
-    customer_id = payment_intent.get("customer")
-    payment_intent_id = payment_intent.get("id")
+    customer_id = payment_intent.customer
+    payment_intent_id = payment_intent.id
 
     if not customer_id or not payment_intent_id:
         return
@@ -331,13 +516,8 @@ def handle_payment_failed(payment_intent):
     ):
         return
 
-    payment_transaction.status = (
-        PaymentTransactionStatus.FAILED
-    )
-
-    payment_transaction.save(
-        update_fields=["status"]
-    )
+    payment_transaction.status = PaymentTransactionStatus.FAILED
+    payment_transaction.save(update_fields=["status"])
 
 
 # UPDATE PAYMENT TRANSACTION

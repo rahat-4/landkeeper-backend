@@ -39,6 +39,7 @@ class PaymentCardSerializer(serializers.ModelSerializer):
         model = PaymentCard
         fields = [
             "id",
+            "alias",
             "stripe_payment_method_id",
             "last_four",
             "card_brand",
