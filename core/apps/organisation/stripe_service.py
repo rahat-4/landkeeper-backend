@@ -375,6 +375,9 @@ def handle_payment_success(payment_intent):
         subscription.stripe_subscription_id
     )
 
+    # GET SUBSCRIPTION ITEM
+    subscription_item = stripe_subscription.items.data[0]
+
     # UPDATE LOCAL SUBSCRIPTION
     subscription.status = (
         OrganisationSubscriptionStatus.ACTIVE
@@ -386,7 +389,7 @@ def handle_payment_success(payment_intent):
     )
 
     subscription.next_billing_date = datetime.fromtimestamp(
-        stripe_subscription.current_period_end,
+        subscription_item.current_period_end,
         tz=timezone.utc,
     )
 
