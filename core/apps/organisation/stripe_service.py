@@ -322,11 +322,16 @@ def handle_payment_success(payment_intent):
     ):
         return
 
-    # Payment successful
-    payment_transaction.status = PaymentTransactionStatus.SUCCEEDED
-    payment_transaction.save(update_fields=["status"])
+    # PAYMENT TRANSACTION
+    payment_transaction.status = (
+        PaymentTransactionStatus.SUCCEEDED
+    )
 
-    # Save payment card
+    payment_transaction.save(
+        update_fields=["status"]
+    )
+
+    # SAVE PAYMENT CARD
     payment_method_id = payment_intent.payment_method
 
     if payment_method_id:
@@ -337,28 +342,43 @@ def handle_payment_success(payment_intent):
         card = payment_method.card
 
         if card:
-            PaymentCard.objects.update_or_create(
-                stripe_payment_method_id=payment_method.id,
-                defaults={
-                    "organisation": organisation,
-                    "last_four": card.last4,
-                    "card_brand": card.brand,
-                    "expiry_month": card.exp_month,
-                    "expiry_year": card.exp_year,
-                    "is_default": True,
-                },
-            )
+            with transaction.atomic():
 
-    # Get subscription
+                # Remove old default card
+                PaymentCard.objects.filter(
+                    organisation=organisation,
+                    is_default=True,
+                ).exclude(
+                    stripe_payment_method_id=payment_method.id
+                ).update(
+                    is_default=False
+                )
+
+                # Save current card as default
+                PaymentCard.objects.update_or_create(
+                    stripe_payment_method_id=payment_method.id,
+                    defaults={
+                        "organisation": organisation,
+                        "last_four": card.last4,
+                        "card_brand": card.brand,
+                        "expiry_month": card.exp_month,
+                        "expiry_year": card.exp_year,
+                        "is_default": True,
+                    },
+                )
+
+    # GET LOCAL SUBSCRIPTION
     subscription = payment_transaction.subscription
 
-    # Get Stripe subscription
+    # GET STRIPE SUBSCRIPTION
     stripe_subscription = stripe.Subscription.retrieve(
         subscription.stripe_subscription_id
     )
 
-    # Update local subscription
-    subscription.status = OrganisationSubscriptionStatus.ACTIVE
+    # UPDATE LOCAL SUBSCRIPTION
+    subscription.status = (
+        OrganisationSubscriptionStatus.ACTIVE
+    )
 
     subscription.start_date = datetime.fromtimestamp(
         stripe_subscription.start_date,
@@ -370,7 +390,9 @@ def handle_payment_success(payment_intent):
         tz=timezone.utc,
     )
 
-    subscription.auto_renew = not stripe_subscription.cancel_at_period_end
+    subscription.auto_renew = (
+        not stripe_subscription.cancel_at_period_end
+    )
 
     subscription.save(
         update_fields=[
@@ -530,12 +552,6 @@ def cancel_subscription(
         cancel_at_period_end=at_period_end,
     )
 
-# GET CHECKOUT SESSION
-def get_checkout_session(session_id):
-    return stripe.checkout.Session.retrieve(
-        session_id,
-        expand=["subscription"],
-    )
 
 # GET STRIPE SUBSCRIPTION
 def get_stripe_subscription(
@@ -569,24 +585,67 @@ def detach_payment_method(
     organisation,
     payment_card,
 ):
-
-    if (
-        payment_card.organisation_id
-        != organisation.id
-    ):
+    if payment_card.organisation_id != organisation.id:
         raise ValueError(
             "Payment card does not belong to this organisation."
         )
 
-    payment_method_id = (
-        payment_card.stripe_payment_method_id
-    )
+    customer_id = organisation.stripe_customer_id
 
-    stripe.PaymentMethod.detach(
-        payment_method_id
-    )
+    if not customer_id:
+        raise ValueError(
+            "Organisation does not have a Stripe customer."
+        )
 
+    payment_method_id = payment_card.stripe_payment_method_id
+    was_default = payment_card.is_default
+
+    # Detach card from Stripe
+    stripe.PaymentMethod.detach(payment_method_id)
+
+    # Delete local card
     payment_card.delete()
+
+    # If deleted card was NOT default,
+    # nothing else needs to be done
+    if not was_default:
+        return
+
+    # Find another card
+    new_default_card = (
+        PaymentCard.objects
+        .filter(
+            organisation=organisation,
+        )
+        .order_by("-id")
+        .first()
+    )
+
+    # No cards left
+    if not new_default_card:
+        stripe.Customer.modify(
+            customer_id,
+            invoice_settings={
+                "default_payment_method": None,
+            },
+        )
+        return
+
+    # Make another card default in Stripe
+    stripe.Customer.modify(
+        customer_id,
+        invoice_settings={
+            "default_payment_method": (
+                new_default_card.stripe_payment_method_id
+            ),
+        },
+    )
+
+    # Make it default in local DB
+    new_default_card.is_default = True
+    new_default_card.save(
+        update_fields=["is_default"]
+    )
 
 
 
