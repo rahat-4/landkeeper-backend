@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Organisation, OrganisationUser
+from .models import Organisation, OrganisationUser, OrganisationSubscription
 
 
 @admin.register(Organisation)
@@ -16,3 +16,21 @@ class OrganisationUserAdmin(admin.ModelAdmin):
         "user__email",
         "organisation__name",
     )
+
+
+@admin.register(OrganisationSubscription)
+class OrganisationSubscriptionAdmin(admin.ModelAdmin):
+    list_display = (
+        "organisation",
+        "plan",
+        "status",
+        "stripe_subscription_id",
+        "stripe_checkout_session_id",
+        "started_at",
+        "current_period_start",
+        "current_period_end",
+        "cancelled_at",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = ("organisation__name", "plan__name")
