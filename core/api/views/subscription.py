@@ -1,7 +1,9 @@
+import uuid
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views import View
+from django.utils import timezone
 import stripe
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -25,6 +27,10 @@ from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.stripe_service import (
     handle_payment_success,
     handle_payment_failed,
+    handle_invoice_payment_succeeded,
+    handle_invoice_payment_failed,
+    handle_subscription_deleted,
+    handle_subscription_updated,
     create_subscription_with_client_secret,
 )
 from apps.subscription.models import (
@@ -60,6 +66,122 @@ class SelectSubscriptionView(APIView):
 
         organisation = request.user.get_organisation()
 
+        current_subscription = OrganisationSubscription.objects.filter(
+            organisation=organisation,
+        ).select_related("plan").first()
+
+        if current_subscription:
+
+            # RULE: ACTIVE subscription
+            if current_subscription.status == OrganisationSubscriptionStatus.ACTIVE:
+
+                now = timezone.now()
+                billing_period_over = (
+                    current_subscription.next_billing_date is not None
+                    and now >= current_subscription.next_billing_date
+                )
+
+                # Case A: billing period NOT over yet → block switching entirely
+                if not billing_period_over:
+
+                    if current_subscription.plan_id == plan.id:
+                        return Response(
+                            {"detail": "You are already subscribed to this plan."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    return Response(
+                        {
+                            "detail": (
+                                f"You already have an active subscription to "
+                                f"'{current_subscription.plan.name}'. "
+                                f"Please wait until it ends, or use the plan-change "
+                                f"flow to switch plans."
+                            ),
+                            "current_plan": current_subscription.plan.name,
+                            "next_billing_date": current_subscription.next_billing_date,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Case B: billing period IS over → treat as expired, allow switching
+                # but still enforce the downgrade/property-count check below.
+                # (fall through to the downgrade check)
+
+            # RULE: Downgrade check (applies when switching to a plan
+            # with fewer max_properties than currently used) — applies
+            # whether the current subscription is ACTIVE-but-expired
+            # or already PENDING/CANCELLED and the org still has
+            # properties from a previous plan.
+            if current_subscription.plan_id != plan.id:
+                current_property_count = (
+                    organisation.organisation_properties.count()
+                )
+
+                if plan.max_properties < current_property_count:
+                    excess = current_property_count - plan.max_properties
+
+                    return Response(
+                        {
+                            "detail": (
+                                f"Cannot switch to '{plan.name}'. "
+                                f"You currently have {current_property_count} "
+                                f"properties, but this plan only allows "
+                                f"{plan.max_properties}. Please remove "
+                                f"{excess} properties before downgrading."
+                            ),
+                            "current_property_count": current_property_count,
+                            "new_plan_max_properties": plan.max_properties,
+                            "properties_to_remove": excess,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # RULE: PENDING subscription → free to switch to ANY plan
+            # (payment not completed yet, nothing "locked in")
+            if current_subscription.status == OrganisationSubscriptionStatus.PENDING:
+
+                if (
+                    current_subscription.plan_id != plan.id
+                    and current_subscription.stripe_subscription_id
+                ):
+                    try:
+                        stripe.Subscription.cancel(
+                            current_subscription.stripe_subscription_id
+                        )
+                    except stripe.error.InvalidRequestError:
+                        pass
+
+                result = create_subscription_with_client_secret(
+                    organisation=organisation,
+                    user=request.user,
+                    plan=plan,
+                )
+                return Response(
+                    {
+                        "subscription_id": result["subscription_id"],
+                        "client_secret": result["client_secret"],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # RULE: ACTIVE but expired (billing period over) → allow new
+            # subscription to be created for the selected plan.
+            if current_subscription.status == OrganisationSubscriptionStatus.ACTIVE:
+                result = create_subscription_with_client_secret(
+                    organisation=organisation,
+                    user=request.user,
+                    plan=plan,
+                )
+                return Response(
+                    {
+                        "subscription_id": result["subscription_id"],
+                        "client_secret": result["client_secret"],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+        # No existing subscription at all → normal flow
         result = create_subscription_with_client_secret(
             organisation=organisation,
             user=request.user,
@@ -80,31 +202,40 @@ class SelectSubscriptionView(APIView):
 class StripeWebhookView(View):
 
     def post(self, request, *args, **kwargs):
-
         payload = request.body
         signature = request.META.get("HTTP_STRIPE_SIGNATURE")
 
         try:
             event = stripe.Webhook.construct_event(
-                payload,
-                signature,
-                settings.STRIPE_WEBHOOK_SECRET,
+                payload, signature, settings.STRIPE_WEBHOOK_SECRET,
             )
-
         except ValueError:
             return HttpResponse(status=400)
-
         except stripe.error.SignatureVerificationError:
             return HttpResponse(status=400)
 
         event_type = event["type"]
         data = event["data"]["object"]
 
+        # Keep old handlers for backward compat / direct PI events
         if event_type == "payment_intent.succeeded":
             handle_payment_success(data)
 
         elif event_type == "payment_intent.payment_failed":
             handle_payment_failed(data)
+
+        # Primary handlers — these cover renewals correctly
+        elif event_type == "invoice.payment_succeeded":
+            handle_invoice_payment_succeeded(data)
+
+        elif event_type == "invoice.payment_failed":
+            handle_invoice_payment_failed(data)
+
+        elif event_type == "customer.subscription.deleted":
+            handle_subscription_deleted(data)
+
+        elif event_type == "customer.subscription.updated":
+            handle_subscription_updated(data)
 
         return HttpResponse(status=200)
 
