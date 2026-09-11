@@ -4,12 +4,12 @@ from api.views.subscription import (
     SelectSubscriptionView,
     StripeWebhookView,
     SubscriptionPlanListView,
-    SubscriptionStatusView,
     LandlordPaymentCardListAPIView,
     LandlordPaymentCardDeleteAPIView,
     LandlordBillingHistoryAPIView,
     LandlordSubscriptionAPIView,
-    LandlordSubscriptionValidationAPIView
+    LandlordSubscriptionValidationAPIView,
+    SubscriptionAutoRenewView,
 )
 
 urlpatterns = [
@@ -27,11 +27,6 @@ urlpatterns = [
         "/stripe",
         StripeWebhookView.as_view(),
         name="stripe-webhook",
-    ),
-    path(
-        "/status",
-        SubscriptionStatusView.as_view(),
-        name="subscription-status",
     ),
     path(
         "/cards",
@@ -52,6 +47,11 @@ urlpatterns = [
         "",
         LandlordSubscriptionAPIView.as_view(),
         name="landlord-subscription",
+    ),
+    path(
+        "/<uuid:alias>",
+        SubscriptionAutoRenewView.as_view(),
+        name="update-subscription-auto-renew",
     ),
     path(
         "/validation",

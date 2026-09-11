@@ -279,6 +279,16 @@ FRONTEND_PAYMENT_CANCEL_URL = f"{FRONTEND_URL}/payment/cancel"
 # Redis
 REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": config("DJANGO_CACHE_URL", default="redis://localhost:6379/3"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+
 # Celery
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_RESULT_BACKEND = config(

@@ -76,6 +76,7 @@ class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganisationSubscription
         fields = [
+            "alias",
             "status",
             "plan",
             "start_date",
@@ -107,3 +108,14 @@ class SelectSubscriptionSerializer(serializers.Serializer):
                 "This subscription plan is not available."
             )
         return plan
+
+class SubscriptionAutoRenewUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrganisationSubscription
+        fields = [
+            "alias",
+            "auto_renew"
+        ]
+        read_only_fields = [
+            "alias",
+        ]

@@ -21,7 +21,7 @@ from apps.organisation.stripe_connect import (
     get_oauth_authorize_url,
     exchange_oauth_code,
     save_oauth_result,
-    logger,
+    logger, verify_and_consume_state,
 )
 
 from common.permission import IsLandlord
@@ -108,12 +108,13 @@ class StripeConnectOAuthStartView(APIView):
                 {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        authorize_url = get_oauth_authorize_url(organisation)
+        authorize_url = get_oauth_authorize_url(organisation, request.user)
         return Response({"authorize_url": authorize_url}, status=status.HTTP_200_OK)
 
 
+
 class StripeConnectOAuthCallbackView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         code = request.GET.get("code")
@@ -135,11 +136,16 @@ class StripeConnectOAuthCallbackView(APIView):
                 {"error": "Missing code or state."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            organisation = Organisation.objects.get(id=state)
-        except Organisation.DoesNotExist:
+        organisation = verify_and_consume_state(state, request.user)  # ← এটা ব্যবহার হচ্ছে কিনা
+
+        if not organisation:
+            logger.warning(
+                "Stripe OAuth callback with invalid/expired/mismatched state",
+                extra={"user_id": request.user.id},
+            )
             return Response(
-                {"error": "Invalid organisation."}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "Invalid or expired connection request."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:

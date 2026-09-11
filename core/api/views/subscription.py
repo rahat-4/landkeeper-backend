@@ -2,17 +2,14 @@ import uuid
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 from django.views import View
 from django.utils import timezone
 import stripe
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.conf import settings
-from rest_framework.generics import (
-    ListAPIView,
-    DestroyAPIView,
-    RetrieveUpdateAPIView
-)
+from rest_framework.generics import ListAPIView, DestroyAPIView, RetrieveUpdateAPIView
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.response import Response
@@ -21,7 +18,8 @@ from api.serializers.subscription import (
     SubscriptionPlanSerializer,
     PaymentCardSerializer,
     BillingHistorySerializer,
-    OrganisationSubscriptionStatusSerializer
+    OrganisationSubscriptionStatusSerializer,
+    SubscriptionAutoRenewUpdateSerializer,
 )
 from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.stripe_service import (
@@ -33,11 +31,7 @@ from apps.organisation.stripe_service import (
     handle_subscription_updated,
     create_subscription_with_client_secret,
 )
-from apps.subscription.models import (
-    SubscriptionPlan,
-    PaymentCard,
-    PaymentTransaction
-)
+from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTransaction
 from apps.organisation.models import OrganisationSubscription
 from common.permission import IsLandlord
 
@@ -66,9 +60,13 @@ class SelectSubscriptionView(APIView):
 
         organisation = request.user.get_organisation()
 
-        current_subscription = OrganisationSubscription.objects.filter(
-            organisation=organisation,
-        ).select_related("plan").first()
+        current_subscription = (
+            OrganisationSubscription.objects.filter(
+                organisation=organisation,
+            )
+            .select_related("plan")
+            .first()
+        )
 
         if current_subscription:
 
@@ -114,9 +112,7 @@ class SelectSubscriptionView(APIView):
             # or already PENDING/CANCELLED and the org still has
             # properties from a previous plan.
             if current_subscription.plan_id != plan.id:
-                current_property_count = (
-                    organisation.organisation_properties.count()
-                )
+                current_property_count = organisation.organisation_properties.count()
 
                 if plan.max_properties < current_property_count:
                     excess = current_property_count - plan.max_properties
@@ -197,7 +193,6 @@ class SelectSubscriptionView(APIView):
         )
 
 
-
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(View):
 
@@ -207,7 +202,9 @@ class StripeWebhookView(View):
 
         try:
             event = stripe.Webhook.construct_event(
-                payload, signature, settings.STRIPE_WEBHOOK_SECRET,
+                payload,
+                signature,
+                settings.STRIPE_WEBHOOK_SECRET,
             )
         except ValueError:
             return HttpResponse(status=400)
@@ -252,55 +249,15 @@ class SubscriptionPlanListView(ListAPIView):
         )
 
 
-class SubscriptionStatusView(APIView):
-
-    def get(self, request):
-        organisation = request.user.get_organisation()
-
-        try:
-            subscription = (
-                OrganisationSubscription.objects
-                .select_related("plan")
-                .get(organisation=organisation)
-            )
-
-        except OrganisationSubscription.DoesNotExist:
-            return Response(
-                {
-                    "has_subscription": False,
-                    "subscription": None,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        return Response(
-            {
-                "has_subscription": True,
-                "subscription": {
-                    "plan": subscription.plan.name,
-                    "plan_alias": str(subscription.plan.alias),
-                    "status": subscription.status,
-                    "monthly_price": subscription.plan.monthly_price,
-                    "start_date": subscription.start_date,
-                    "end_date": subscription.end_date,
-                    "next_billing_date": subscription.next_billing_date,
-                    "auto_renew": subscription.auto_renew,
-                    "cancelled_at": subscription.cancelled_at,
-                },
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
 class LandlordPaymentCardListAPIView(APIView):
     permission_classes = [IsLandlord]
 
     def get(self, request):
         organisation = request.user.get_organisation()
 
-        cards = PaymentCard.objects.filter(
-            organisation=organisation
-        ).order_by("-is_default", "-id")
+        cards = PaymentCard.objects.filter(organisation=organisation).order_by(
+            "-is_default", "-id"
+        )
 
         serializer = PaymentCardSerializer(cards, many=True)
 
@@ -320,27 +277,19 @@ class LandlordPaymentCardDeleteAPIView(DestroyAPIView):
     def get_queryset(self):
         organisation = self.request.user.get_organisation()
 
-        return PaymentCard.objects.filter(
-            organisation=organisation
-        )
+        return PaymentCard.objects.filter(organisation=organisation)
 
     def perform_destroy(self, instance):
         organisation = self.request.user.get_organisation()
 
         was_default = instance.is_default
 
-        stripe.PaymentMethod.detach(
-            instance.stripe_payment_method_id
-        )
+        stripe.PaymentMethod.detach(instance.stripe_payment_method_id)
 
         instance.delete()
 
         if was_default:
-            new_default = (
-                PaymentCard.objects
-                .filter(organisation=organisation)
-                .first()
-            )
+            new_default = PaymentCard.objects.filter(organisation=organisation).first()
 
             if new_default:
                 new_default.is_default = True
@@ -349,11 +298,10 @@ class LandlordPaymentCardDeleteAPIView(DestroyAPIView):
                 stripe.Customer.modify(
                     organisation.stripe_customer_id,
                     invoice_settings={
-                        "default_payment_method": (
-                            new_default.stripe_payment_method_id
-                        )
+                        "default_payment_method": (new_default.stripe_payment_method_id)
                     },
                 )
+
 
 class LandlordBillingHistoryAPIView(ListAPIView):
     serializer_class = BillingHistorySerializer
@@ -363,8 +311,7 @@ class LandlordBillingHistoryAPIView(ListAPIView):
         organisation = self.request.user.get_organisation()
 
         return (
-            PaymentTransaction.objects
-            .filter(
+            PaymentTransaction.objects.filter(
                 organisation=organisation,
             )
             .select_related(
@@ -373,6 +320,7 @@ class LandlordBillingHistoryAPIView(ListAPIView):
             )
             .order_by("-created_at")
         )
+
 
 class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
     serializer_class = OrganisationSubscriptionStatusSerializer
@@ -397,9 +345,40 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
             )
 
             subscription.auto_renew = auto_renew
-            subscription.save(
-                update_fields=["auto_renew"]
-            )
+            subscription.save(update_fields=["auto_renew"])
+
+
+class SubscriptionAutoRenewView(RetrieveUpdateAPIView):
+    serializer_class = SubscriptionAutoRenewUpdateSerializer
+    permission_classes = [IsLandlord]
+    lookup_field = "alias"
+    lookup_url_kwarg = "alias"
+
+    def get_queryset(self):
+        organisation = self.request.user.get_organisation()
+        return OrganisationSubscription.objects.select_related("plan").filter(
+            organisation=organisation,
+        )
+
+    def perform_update(self, serializer):
+        subscription = self.get_object()
+        auto_renew = serializer.validated_data.get(
+            "auto_renew", subscription.auto_renew
+        )
+
+        if subscription.stripe_subscription_id:
+            try:
+                stripe.Subscription.modify(
+                    subscription.stripe_subscription_id,
+                    cancel_at_period_end=not auto_renew,
+                )
+            except stripe.error.InvalidRequestError:
+                raise ValidationError(
+                    {"detail": "Failed to update subscription on Stripe."}
+                )
+
+        serializer.save()
+
 
 class LandlordSubscriptionValidationAPIView(APIView):
     permission_classes = [IsLandlord]
@@ -432,8 +411,7 @@ class LandlordSubscriptionValidationAPIView(APIView):
             )
 
         current_subscription = (
-            OrganisationSubscription.objects
-            .select_related("plan")
+            OrganisationSubscription.objects.select_related("plan")
             .filter(
                 organisation=organisation,
                 status=OrganisationSubscriptionStatus.ACTIVE,
@@ -445,10 +423,7 @@ class LandlordSubscriptionValidationAPIView(APIView):
             return Response(
                 {
                     "allowed": True,
-                    "message": (
-                        "No active subscription. "
-                        "Plan selection allowed."
-                    ),
+                    "message": ("No active subscription. " "Plan selection allowed."),
                     "plan": {
                         "alias": str(new_plan.alias),
                         "name": new_plan.name,
@@ -465,10 +440,7 @@ class LandlordSubscriptionValidationAPIView(APIView):
             return Response(
                 {
                     "allowed": False,
-                    "message": (
-                        "You are already subscribed "
-                        "to this plan."
-                    ),
+                    "message": ("You are already subscribed " "to this plan."),
                 },
                 status=status.HTTP_200_OK,
             )
@@ -488,34 +460,24 @@ class LandlordSubscriptionValidationAPIView(APIView):
                         "period ends."
                     ),
                     "current_plan": current_plan.name,
-                    "current_period_end": (
-                        current_subscription.next_billing_date
-                    ),
+                    "current_period_end": (current_subscription.next_billing_date),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        current_property_count = (
-            organisation.organisation_properties.count()
-        )
+        current_property_count = organisation.organisation_properties.count()
 
         current_price = current_plan.monthly_price or 0
         new_price = new_plan.monthly_price or 0
 
         if new_price < current_price:
             if new_plan.max_properties < current_property_count:
-                excess = (
-                    current_property_count
-                    - new_plan.max_properties
-                )
+                excess = current_property_count - new_plan.max_properties
 
                 return Response(
                     {
                         "allowed": False,
-                        "message": (
-                            f"Cannot switch to "
-                            f"'{new_plan.name}'."
-                        ),
+                        "message": (f"Cannot switch to " f"'{new_plan.name}'."),
                         "errors": [
                             (
                                 f"{current_property_count} properties "
