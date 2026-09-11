@@ -357,8 +357,21 @@ def handle_payment_success(payment_intent):
         PaymentTransactionStatus.SUCCEEDED
     )
 
+    update_fields = ["status"]
+
+    if payment_intent.invoice:
+        payment_transaction.stripe_invoice_id = payment_intent.invoice
+        update_fields.append("stripe_invoice_id")
+
+        try:
+            invoice = stripe.Invoice.retrieve(payment_intent.invoice)
+            payment_transaction.invoice_pdf_url = invoice.invoice_pdf
+            update_fields.append("invoice_pdf_url")
+        except stripe.error.StripeError:
+            pass
+
     payment_transaction.save(
-        update_fields=["status"]
+        update_fields=update_fields
     )
 
     # SAVE PAYMENT CARD
@@ -434,7 +447,6 @@ def handle_payment_success(payment_intent):
             "auto_renew",
         ]
     )
-
 
 # PAYMENT FAILED
 def handle_payment_failed(payment_intent):
@@ -772,13 +784,24 @@ def handle_invoice_payment_succeeded(invoice):
                 "currency": invoice.get("currency", "gbp").upper(),
                 "status": PaymentTransactionStatus.SUCCEEDED,
                 "attempt_number": 1,
+                "stripe_invoice_id": invoice.get("id"),
+                "invoice_pdf_url": invoice.get("invoice_pdf"),
             },
         )
 
         if not created:
             payment_transaction.status = PaymentTransactionStatus.SUCCEEDED
             payment_transaction.amount = amount_paid
-            payment_transaction.save(update_fields=["status", "amount"])
+            payment_transaction.stripe_invoice_id = invoice.get("id")
+            payment_transaction.invoice_pdf_url = invoice.get("invoice_pdf")
+            payment_transaction.save(
+                update_fields=[
+                    "status",
+                    "amount",
+                    "stripe_invoice_id",
+                    "invoice_pdf_url",
+                ]
+            )
 
     # Sync subscription status/dates from Stripe (covers renewals too)
     stripe_subscription = stripe.Subscription.retrieve(subscription_id)

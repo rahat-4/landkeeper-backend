@@ -122,6 +122,17 @@ class PaymentTransaction(CreatedAtUpdatedAtBaseModel):
         null=True,
         db_index=True,
     )
+    stripe_invoice_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
+    invoice_pdf_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+    )
     status = models.CharField(
         max_length=20,
         choices=PaymentTransactionStatus.choices,
