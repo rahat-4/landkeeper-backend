@@ -66,6 +66,7 @@ class BillingHistorySerializer(serializers.ModelSerializer):
             "status",
             "attempt_number",
             "created_at",
+            "invoice_pdf_url",
         ]
         read_only_fields = fields
 
