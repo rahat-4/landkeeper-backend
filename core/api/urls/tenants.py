@@ -7,13 +7,6 @@ from api.views.tenants import (
     RentPaymentDetailView,
     RentBalanceSummaryView,
     RentStatementView,
-    DirectDebitSetupView,
-    DirectDebitCompleteView,
-    DirectDebitPaymentView,
-    CardPaymentView,
-    DirectDebitCallbackView,
-    StripeWebhookView,
-    GoCardlessWebhookView,
     FinancialOverviewListView,
     PropertyTenancyListView,
     PaymentHistoryView,
@@ -57,35 +50,10 @@ urlpatterns = [
         name="statement-full-year",
     ),
     path(
-        "/payment-methods/direct-debit/setup",
-        DirectDebitSetupView.as_view(),
-        name="direct-debit-setup",
-    ),
-    path(
-        "/payment-methods/direct-debit/complete",
-        DirectDebitCompleteView.as_view(),
-        name="direct-debit-complete",
-    ),
-    path(
-        "/payment-methods/direct-debit/callback",
-        DirectDebitCallbackView.as_view(),
-        name="direct-debit-callback",
-    ),
-    path(
-        "/rent-payments/pay-with-card", CardPaymentView.as_view(), name="pay-with-card"
-    ),
-    path(
-        "/rent-payments/pay-with-direct-debit",
-        DirectDebitPaymentView.as_view(),
-        name="pay-with-direct-debit",
-    ),
-    path(
         "/rent-payments/payment-history",
         PaymentHistoryView.as_view(),
         name="payment-history",
     ),
-    path("/stripe", StripeWebhookView.as_view(), name="webhook-stripe"),
-    path("/gocardless", GoCardlessWebhookView.as_view(), name="webhook-gocardless"),
     path(
         "/property-and-tenancy-details",
         PropertyTenancyListView.as_view(),
