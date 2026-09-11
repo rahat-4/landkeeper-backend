@@ -168,7 +168,6 @@ def sync_payment_method_to_organisation(
     return payment_card
 
 
-
 # CREATE SUBSCRIPTION DIRECTLY
 def create_subscription_with_client_secret(
     organisation,
@@ -410,28 +409,27 @@ def handle_payment_success(payment_intent):
     subscription_item = stripe_subscription.items.data[0]
 
     # UPDATE LOCAL SUBSCRIPTION
-    subscription.status = (
-        OrganisationSubscriptionStatus.ACTIVE
-    )
+    subscription.status = OrganisationSubscriptionStatus.ACTIVE
 
     subscription.start_date = datetime.fromtimestamp(
         stripe_subscription.start_date,
         tz=timezone.utc,
     )
 
-    subscription.next_billing_date = datetime.fromtimestamp(
+    period_end = datetime.fromtimestamp(
         subscription_item.current_period_end,
         tz=timezone.utc,
     )
+    subscription.end_date = period_end
+    subscription.next_billing_date = period_end
 
-    subscription.auto_renew = (
-        not stripe_subscription.cancel_at_period_end
-    )
+    subscription.auto_renew = not stripe_subscription.cancel_at_period_end
 
     subscription.save(
         update_fields=[
             "status",
             "start_date",
+            "end_date",
             "next_billing_date",
             "auto_renew",
         ]
@@ -511,7 +509,6 @@ def update_payment_transaction_from_intent(payment_intent):
     return payment_transaction
 
 
-
 # SUBSCRIPTION PLAN CHANGE
 def change_subscription_plan(
     organisation,
@@ -572,7 +569,6 @@ def change_subscription_plan(
     )
 
     return updated_subscription
-
 
 
 # CANCEL SUBSCRIPTION
@@ -680,7 +676,6 @@ def detach_payment_method(
     new_default_card.save(
         update_fields=["is_default"]
     )
-
 
 
 # SET DEFAULT PAYMENT METHOD
@@ -793,12 +788,22 @@ def handle_invoice_payment_succeeded(invoice):
     local_subscription.start_date = local_subscription.start_date or datetime.fromtimestamp(
         stripe_subscription.start_date, tz=timezone.utc,
     )
+    local_subscription.end_date = datetime.fromtimestamp(
+        subscription_item.current_period_end,
+        tz=timezone.utc,
+    )
     local_subscription.next_billing_date = datetime.fromtimestamp(
         subscription_item.current_period_end, tz=timezone.utc,
     )
     local_subscription.auto_renew = not stripe_subscription.cancel_at_period_end
     local_subscription.save(
-        update_fields=["status", "start_date", "next_billing_date", "auto_renew"]
+        update_fields=[
+            "status",
+            "start_date",
+            "end_date",
+            "next_billing_date",
+            "auto_renew",
+        ]
     )
 
 # INVOICE PAYMENT FAILED
@@ -873,33 +878,52 @@ def handle_subscription_updated(stripe_subscription):
 
     if items:
         current_period_end = items[0].get("current_period_end")
+
         if current_period_end:
-            local_subscription.next_billing_date = datetime.fromtimestamp(
-                current_period_end, tz=timezone.utc,
+            period_end = datetime.fromtimestamp(
+                current_period_end,
+                tz=timezone.utc,
             )
-            update_fields.append("next_billing_date")
+
+            local_subscription.end_date = period_end
+            local_subscription.next_billing_date = period_end
+
+            update_fields.extend([
+                "end_date",
+                "next_billing_date",
+            ])
 
     if items:
         stripe_price_id = items[0].get("price", {}).get("id")
-        if stripe_price_id and stripe_price_id != local_subscription.plan.stripe_price_id:
+
+        if (
+            stripe_price_id
+            and stripe_price_id != local_subscription.plan.stripe_price_id
+        ):
             try:
                 new_plan = SubscriptionPlan.objects.get(
                     stripe_price_id=stripe_price_id
                 )
+
                 local_subscription.plan = new_plan
                 update_fields.append("plan")
+
             except SubscriptionPlan.DoesNotExist:
                 pass
 
     stripe_status = stripe_subscription.get("status")
+
     status_map = {
         "active": OrganisationSubscriptionStatus.ACTIVE,
         "past_due": OrganisationSubscriptionStatus.PAST_DUE,
         "canceled": OrganisationSubscriptionStatus.CANCELLED,
         "unpaid": OrganisationSubscriptionStatus.PAST_DUE,
     }
+
     if stripe_status in status_map:
         local_subscription.status = status_map[stripe_status]
         update_fields.append("status")
 
-    local_subscription.save(update_fields=list(set(update_fields)))
+    local_subscription.save(
+        update_fields=list(set(update_fields))
+    )

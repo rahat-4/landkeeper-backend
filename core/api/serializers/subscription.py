@@ -76,6 +76,7 @@ class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganisationSubscription
         fields = [
+            "alias",
             "status",
             "plan",
             "start_date",

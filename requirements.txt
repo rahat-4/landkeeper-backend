@@ -64,3 +64,4 @@ daphne==4.1.2
 whitenoise==6.11.0
 openpyxl==3.1.5
 et_xmlfile==2.0.0
+django-redis==5.4.0

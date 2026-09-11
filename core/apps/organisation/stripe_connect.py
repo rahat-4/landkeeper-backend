@@ -1,26 +1,57 @@
 import logging
+import secrets
+
 import stripe
 from django.conf import settings
-
+from django.core.cache import cache
 from apps.organisation.models import Organisation
 
 logger = logging.getLogger("apps.organisation.stripe_connect")
 stripe.api_key = settings.STRIPE_SECRET_KEY
+STATE_CACHE_PREFIX = "stripe_oauth_state:"
+STATE_TTL_SECONDS = 600
 
+def get_oauth_authorize_url(organisation, user):
+    # Random, unguessable token — not the organisation id
+    state_token = secrets.token_urlsafe(32)
 
-def get_oauth_authorize_url(organisation):
+    cache.set(
+        f"{STATE_CACHE_PREFIX}{state_token}",
+        {
+            "organisation_id": organisation.id,
+            "user_id": user.id,
+        },
+        timeout=STATE_TTL_SECONDS,
+    )
+
     return (
         "https://connect.stripe.com/oauth/authorize"
         f"?response_type=code"
         f"&client_id={settings.STRIPE_CONNECT_CLIENT_ID}"
         f"&scope=read_write"
-        f"&state={organisation.id}"
+        f"&state={state_token}"
         f"&redirect_uri={settings.FRONTEND_URL}/settings/payments/oauth-callback"
     )
 
-
 def exchange_oauth_code(code):
     return stripe.OAuth.token(grant_type="authorization_code", code=code)
+
+def verify_and_consume_state(state_token, request_user):
+    key = f"{STATE_CACHE_PREFIX}{state_token}"
+    data = cache.get(key)
+
+    if not data:
+        return None
+
+    cache.delete(key)
+
+    if data["user_id"] != request_user.id:
+        return None
+
+    try:
+        return Organisation.objects.get(id=data["organisation_id"])
+    except Organisation.DoesNotExist:
+        return None
 
 
 def save_oauth_result(organisation, oauth_response):
