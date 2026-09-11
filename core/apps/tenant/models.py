@@ -26,9 +26,9 @@ class PaymentMethod(CreatedAtUpdatedAtBaseModel):
     provider = models.CharField(max_length=20, choices=PaymentProviderChoices.choices)
     method_type = models.CharField(max_length=20, choices=PaymentMethodTypeChoices.choices)
     provider_customer_id = models.CharField(max_length=128, blank=True, null=True)
-    provider_mandate_id = models.CharField(max_length=128, blank=True, null=True)
     provider_payment_method_id = models.CharField(max_length=128, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=PaymentMethodStatusChoices.choices, default=PaymentMethodStatusChoices.PENDING)
+    status = models.CharField(max_length=20, choices=PaymentMethodStatusChoices.choices,
+                              default=PaymentMethodStatusChoices.PENDING)
     is_default = models.BooleanField(default=True)
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
     card_brand = models.CharField(max_length=32, blank=True, null=True)
@@ -44,8 +44,8 @@ class PaymentMethod(CreatedAtUpdatedAtBaseModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(tenant__isnull=False, organisation__isnull=True)
-                    | models.Q(tenant__isnull=True, organisation__isnull=False)
+                        models.Q(tenant__isnull=False, organisation__isnull=True)
+                        | models.Q(tenant__isnull=True, organisation__isnull=False)
                 ),
                 name="payment_method_exactly_one_owner",
             )
@@ -104,21 +104,6 @@ class RentPayment(CreatedAtUpdatedAtBaseModel):
         return f"{self.reference} - {self.tenant} - £{self.amount}"
 
 
-class ProcessedWebhookEvent(models.Model):
-    provider = models.CharField(max_length=20)
-    event_id = models.CharField(max_length=128)
-    received_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["provider", "event_id"], name="unique_provider_event"
-            )
-        ]
-        indexes = [
-            models.Index(fields=["provider", "event_id"]),
-        ]
-
 class CardPayment(CreatedAtUpdatedAtBaseModel):
     tenant = models.ForeignKey(
         Tenant, on_delete=models.CASCADE, related_name="card_payments"
@@ -145,7 +130,6 @@ class CardPayment(CreatedAtUpdatedAtBaseModel):
 
     def __str__(self):
         return f"{self.alias} - {self.tenant} - £{self.amount}"
-
 
 
 class MaintenanceRequest(CreatedAtUpdatedAtBaseModel):

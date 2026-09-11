@@ -1,6 +1,5 @@
 import logging
 import calendar
-import re
 from datetime import date
 
 from django.db import transaction
@@ -13,8 +12,6 @@ from apps.organisation.models import OrganisationUser
 from apps.property.models import Tenant
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
-    PaymentProviderChoices,
-    MaintenanceStatus,
 )
 from apps.tenant.models import (
     PaymentMethod,
@@ -39,7 +36,6 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             "provider",
             "method_type",
             "provider_customer_id",
-            "provider_mandate_id",
             "provider_payment_method_id",
             "status",
             "is_default",
@@ -54,7 +50,6 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             "organisation",
             "provider",
             "provider_customer_id",
-            "provider_mandate_id",
             "provider_payment_method_id",
             "status",
             "is_default",
@@ -63,6 +58,7 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
 
 class RentPaymentSerializer(serializers.ModelSerializer):
     payment_method = PaymentMethodSerializer(read_only=True)
@@ -163,16 +159,16 @@ class RentBalanceSummarySerializer(serializers.Serializer):
 
     def get_outstanding_balance(self, tenant):
         rent_total = (
-            RentPayment.objects.filter(tenant=tenant)
-            .exclude(
-                status__in=[
-                    RentPaymentStatusChoices.CLEARED,
-                    RentPaymentStatusChoices.REFUNDED,
-                    RentPaymentStatusChoices.FAILED,
-                ]
-            )
-            .aggregate(total=Sum("amount"))["total"]
-            or 0
+                RentPayment.objects.filter(tenant=tenant)
+                .exclude(
+                    status__in=[
+                        RentPaymentStatusChoices.CLEARED,
+                        RentPaymentStatusChoices.REFUNDED,
+                        RentPaymentStatusChoices.FAILED,
+                    ]
+                )
+                .aggregate(total=Sum("amount"))["total"]
+                or 0
         )
 
         existing_due_dates = set(
@@ -180,17 +176,17 @@ class RentBalanceSummarySerializer(serializers.Serializer):
         )
 
         orphan_card_total = (
-            CardPayment.objects.filter(tenant=tenant)
-            .exclude(due_date__in=existing_due_dates)
-            .exclude(
-                status__in=[
-                    RentPaymentStatusChoices.CLEARED,
-                    RentPaymentStatusChoices.REFUNDED,
-                    RentPaymentStatusChoices.FAILED,
-                ]
-            )
-            .aggregate(total=Sum("amount"))["total"]
-            or 0
+                CardPayment.objects.filter(tenant=tenant)
+                .exclude(due_date__in=existing_due_dates)
+                .exclude(
+                    status__in=[
+                        RentPaymentStatusChoices.CLEARED,
+                        RentPaymentStatusChoices.REFUNDED,
+                        RentPaymentStatusChoices.FAILED,
+                    ]
+                )
+                .aggregate(total=Sum("amount"))["total"]
+                or 0
         )
 
         return rent_total + orphan_card_total
@@ -239,69 +235,6 @@ class RentBalanceSummarySerializer(serializers.Serializer):
             return None
 
         return next_date
-
-
-class DirectDebitSetupRequestSerializer(serializers.Serializer):
-    success_redirect_url = serializers.URLField()
-
-
-class DirectDebitCompleteRequestSerializer(serializers.Serializer):
-    redirect_flow_id = serializers.CharField()
-    session_token = serializers.CharField()
-
-
-class DirectDebitPaymentRequestSerializer(serializers.Serializer):
-    _BLOCKED_FOR_NEW_ATTEMPT_STATUSES = (
-        RentPaymentStatusChoices.CLEARED,
-        RentPaymentStatusChoices.PROCESSING,
-    )
-
-    due_date = serializers.DateField()
-    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
-
-    def validate(self, attrs):
-        request = self.context["request"]
-        due_date = attrs["due_date"]
-        amount = attrs["amount"]
-
-        rent_payment = (
-            RentPayment.objects.filter(tenant_id=request.user.id, due_date=due_date)
-            .exclude(status__in=self._BLOCKED_FOR_NEW_ATTEMPT_STATUSES)
-            .order_by("-created_at")
-            .first()
-        )
-
-        if rent_payment is None:
-            raise serializers.ValidationError(
-                {"due_date": "No rent payment found for this due date."}
-            )
-
-        if amount != rent_payment.amount:
-            raise serializers.ValidationError(
-                {
-                    "amount": f"Amount must match the rent payment amount of £{rent_payment.amount}."
-                }
-            )
-
-        payment_method = (
-            PaymentMethod.objects.filter(
-                tenant=request.user,
-                provider=PaymentProviderChoices.GOCARDLESS,
-                is_default=True,
-            )
-            .exclude(provider_mandate_id__isnull=True)
-            .exclude(provider_mandate_id="")
-            .first()
-        )
-
-        if not payment_method:
-            raise serializers.ValidationError(
-                "No active direct debit mandate found. Please set up direct debit first."
-            )
-
-        attrs["rent_payment"] = rent_payment
-        attrs["payment_method"] = payment_method
-        return attrs
 
 
 class CardPaymentRequestSerializer(serializers.Serializer):
