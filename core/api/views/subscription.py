@@ -1,8 +1,6 @@
 import uuid
 from django.db import transaction
 from django.http import HttpResponse
-from django.utils import timezone
-from rest_framework.exceptions import ValidationError
 from django.views import View
 from django.utils import timezone
 import stripe
@@ -19,7 +17,6 @@ from api.serializers.subscription import (
     PaymentCardSerializer,
     BillingHistorySerializer,
     OrganisationSubscriptionStatusSerializer,
-    SubscriptionAutoRenewUpdateSerializer,
 )
 from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.stripe_service import (
@@ -347,37 +344,6 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
             subscription.auto_renew = auto_renew
             subscription.save(update_fields=["auto_renew"])
 
-
-class SubscriptionAutoRenewView(RetrieveUpdateAPIView):
-    serializer_class = SubscriptionAutoRenewUpdateSerializer
-    permission_classes = [IsLandlord]
-    lookup_field = "alias"
-    lookup_url_kwarg = "alias"
-
-    def get_queryset(self):
-        organisation = self.request.user.get_organisation()
-        return OrganisationSubscription.objects.select_related("plan").filter(
-            organisation=organisation,
-        )
-
-    def perform_update(self, serializer):
-        subscription = self.get_object()
-        auto_renew = serializer.validated_data.get(
-            "auto_renew", subscription.auto_renew
-        )
-
-        if subscription.stripe_subscription_id:
-            try:
-                stripe.Subscription.modify(
-                    subscription.stripe_subscription_id,
-                    cancel_at_period_end=not auto_renew,
-                )
-            except stripe.error.InvalidRequestError:
-                raise ValidationError(
-                    {"detail": "Failed to update subscription on Stripe."}
-                )
-
-        serializer.save()
 
 
 class LandlordSubscriptionValidationAPIView(APIView):
