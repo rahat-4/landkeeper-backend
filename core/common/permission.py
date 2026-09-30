@@ -58,6 +58,22 @@ class IsMortgageAdviser(BasePermission):
         ).exists()
 
 
+class IsLandlordOrMortgageAdviser(BasePermission):
+    message = "Only landlords or mortgage advisers can perform this action."
+
+    def has_permission(self, request, view):
+        if not isinstance(request.user, User):
+            return False
+
+        return OrganisationUser.objects.filter(
+            user=request.user,
+            role__in=[
+                OrganisationRoleChoices.LANDLORD,
+                OrganisationRoleChoices.MORTGAGE_ADVISER,
+            ],
+        ).exists()
+
+
 class CanAccessProperty(BasePermission):
     message = "You do not have permission to access this property."
 

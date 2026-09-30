@@ -25,7 +25,7 @@ from apps.property.enums import (
 )
 from apps.supportticket.enums import SupportTicketStatus
 
-from common.permission import IsLandlord, IsAdmin
+from common.permission import IsLandlordOrMortgageAdviser
 
 from ..serializers.dashboard import (
     LandlordDashboardSummarySerializer,
@@ -36,17 +36,13 @@ from ..serializers.dashboard import (
 
 class LandlordDashboardSummaryView(RetrieveAPIView):
     serializer_class = LandlordDashboardSummarySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsLandlordOrMortgageAdviser]
 
     def get_object(self):
         organisation = self.request.user.get_organisation()
-
         today = timezone.localdate()
 
-        # ---------------------------------------------------------
         # Properties
-        # ---------------------------------------------------------
-
         properties = Property.objects.filter(organisation=organisation)
         property_total = properties.count()
         property_occupied = properties.filter(status=StatusType.OCCUPIED).count()
@@ -55,27 +51,18 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
             status=StatusType.UNDER_MAINTENANCE
         ).count()
 
-        # ---------------------------------------------------------
         # Tenants
-        # ---------------------------------------------------------
-
         tenants = Tenant.objects.filter(organisation=organisation)
         tenant_total = tenants.count()
         tenant_active = tenants.filter(is_active=True).count()
         tenant_inactive = tenants.filter(is_active=False).count()
 
-        # ---------------------------------------------------------
         # Rental income
-        # ---------------------------------------------------------
-
         monthly_rental_income = properties.aggregate(
             total=Sum("monthly_rental_income")
         )["total"] or Decimal("0.00")
 
-        # ---------------------------------------------------------
         # Mortgages
-        # ---------------------------------------------------------
-
         mortgages = Mortgage.objects.filter(organisation=organisation)
         mortgage_total = mortgages.count()
         mortgage_outstanding = mortgages.aggregate(total=Sum("outstanding_balance"))[
@@ -90,10 +77,7 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
             .values_list("interest_rate_type", "count")
         )
 
-        # ---------------------------------------------------------
         # Finance - current month
-        # ---------------------------------------------------------
-
         current_month_finance = Finance.objects.filter(
             organisation=organisation,
             date__year=today.year,
@@ -110,10 +94,7 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
 
         current_month_net = current_month_income - current_month_expense
 
-        # ---------------------------------------------------------
         # Compliance
-        # ---------------------------------------------------------
-
         compliance = ComplianceAndCertification.objects.filter(
             organisation=organisation
         )
@@ -125,27 +106,18 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
             expiry_date__lte=expiring_soon_date,
         ).count()
 
-        # ---------------------------------------------------------
         # Documents
-        # ---------------------------------------------------------
-
         documents = UploadDocument.objects.filter(organisation=organisation)
         document_total = documents.count()
 
-        # ---------------------------------------------------------
         # Subscription
-        # ---------------------------------------------------------
-
         subscription = (
             OrganisationSubscription.objects.select_related("plan")
             .filter(organisation=organisation)
             .first()
         )
 
-        # ---------------------------------------------------------
         # Support tickets
-        # ---------------------------------------------------------
-
         tickets = SupportTicket.objects.filter(
             organisation=organisation,
             is_deleted=False,
@@ -155,10 +127,7 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
             status=SupportTicketStatus.IN_PROGRESS
         ).count()
 
-        # ---------------------------------------------------------
         # Response
-        # ---------------------------------------------------------
-
         return {
             "properties": {
                 "total": property_total,
@@ -221,7 +190,7 @@ class LandlordDashboardSummaryView(RetrieveAPIView):
 
 class LandlordPropertyTypeDashboardView(RetrieveAPIView):
     serializer_class = LandLordPropertyTypeDashboardSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsLandlordOrMortgageAdviser]
 
     def get_object(self):
         organisation = self.request.user.get_organisation()
