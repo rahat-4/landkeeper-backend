@@ -74,9 +74,18 @@ class CanAccessProperty(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = request.user
+
+        # Superadmin → full access
+        if user.is_superuser:
+            return True
+
         organisation = user.get_organisation()
 
         if not organisation:
+            return False
+
+        # Property must belong to the user's organisation
+        if obj.organisation_id != organisation.id:
             return False
 
         organisation_user = OrganisationUser.objects.filter(
@@ -113,9 +122,6 @@ class CanAccessProperty(BasePermission):
             return permission.can_edit
 
         # DELETE → only Landlord/Admin
-        if request.method == "DELETE":
-            return False
-
         return False
 
 

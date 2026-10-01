@@ -68,6 +68,9 @@ class PropertyListView(ListCreateAPIView):
     search_fields = ["property_name", "address"]
 
     def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Property.objects.all()
+
         organisation = self.request.user.get_organisation()
 
         if not organisation:
@@ -80,21 +83,34 @@ class PropertyListView(ListCreateAPIView):
             organisation=organisation,
         ).first()
 
-        if current_user.role in [
+        if current_user and current_user.role in [
             OrganisationRoleChoices.LANDLORD,
             OrganisationRoleChoices.ADMIN,
         ]:
             return queryset
-        else:
-            queryset = queryset.filter(
-                property_permissions__user=self.request.user,
-                property_permissions__organisation=organisation,
-                property_permissions__can_view=True,
-            ).distinct()
 
-            return queryset
+        return queryset.filter(
+            property_permissions__user=self.request.user,
+            property_permissions__organisation=organisation,
+            property_permissions__can_view=True,
+        ).distinct()
 
     def perform_create(self, serializer):
+        if self.request.user.is_superuser:
+            landlord_alias = self.request.data.get("landlord_alias")
+
+            if not landlord_alias:
+                raise ValidationError({"landlord_alias": "This field is required."})
+
+            landlord = get_object_or_404(
+                OrganisationUser,
+                user__alias=landlord_alias,
+                role=OrganisationRoleChoices.LANDLORD,
+            )
+            serializer.save(organisation=landlord.organisation)
+            return
+
+        # Landlord
         organisation = self.request.user.get_organisation()
 
         if not organisation:
@@ -141,9 +157,7 @@ class PropertyDetailView(RetrieveUpdateDestroyAPIView):
             alias=self.kwargs["property_alias"],
         )
 
-        # Check if the user has permission to access this property
         self.check_object_permissions(self.request, obj)
-
         return obj
 
 
