@@ -518,7 +518,7 @@ def notify_certificate_expiry_task(self, certificate_id, days_left):
 
         data = {
             "type": "COMPLIANCE_CERTIFICATE",
-            # "alias": str(certificate.alias),
+            "alias": str(certificate.alias),
             # "certificate_type": certificate.certificate_type,
             "expiry_date": certificate.expiry_date.isoformat(),
             # "days_left": days_left,
