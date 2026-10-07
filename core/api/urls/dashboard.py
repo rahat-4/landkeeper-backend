@@ -5,6 +5,7 @@ from ..views.dashboard import (
     PropertyTypeDashboardView,
     ComplianceTypeDashboardView,
     DashboardIncomeExpenseDashboardView,
+    AlertsDashboardAPIView,
 )
 
 urlpatterns = [
@@ -27,5 +28,10 @@ urlpatterns = [
         "/income-expense",
         DashboardIncomeExpenseDashboardView.as_view(),
         name="dashboard-income-expense",
+    ),
+    path(
+        "/alerts",
+        AlertsDashboardAPIView.as_view(),
+        name="dashboard-alerts"
     ),
 ]
