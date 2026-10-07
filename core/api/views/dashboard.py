@@ -453,11 +453,15 @@ class AlertsDashboardAPIView(APIView):
 
         alerts = []
         for cert in certificates:
-            days_left = (cert.expiry_date - today).days
+            days = (cert.expiry_date - today).days
+            name = cert.get_certificate_type_display()
+            is_expired = days < 0
+
             alerts.append({
-                "title": f"{cert.get_certificate_type_display()} Renewal Due",
+                "title": f"{name} Expired" if is_expired else f"{name} Renewal Due",
                 "property": cert.property.address or cert.property.property_name,
-                "detail": f"Expires in {days_left} days",
+                "detail": None if is_expired else f"Expires in {days} days".upper(),
+                "expired": f"Expired {abs(days)} days ago".upper() if is_expired else None,
                 "expiry_date": cert.expiry_date,
             })
 
