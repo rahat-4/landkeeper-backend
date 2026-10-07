@@ -427,13 +427,12 @@ class DashboardIncomeExpenseDashboardView(RetrieveAPIView):
         }
 
 
-
 ALERT_DAYS = [30, 15, 3]
 EXPIRED_WINDOW_DAYS = 30
 
 
 class AlertsDashboardAPIView(APIView):
-    permission_classes = [IsSuperAdmin | IsLandlord]
+    permission_classes = [IsSuperAdmin | IsLandlord | IsAdmin]
 
     def get(self, request):
         organisation = get_request_organisation(request)
@@ -451,8 +450,10 @@ class AlertsDashboardAPIView(APIView):
             ComplianceAndCertification.objects.filter(organisation=organisation)
             .filter(
                 Q(expiry_date__in=upcoming_dates)
-                | Q(expiry_date__lt=today,
-                    expiry_date__gte=today - timedelta(days=EXPIRED_WINDOW_DAYS))
+                | Q(
+                    expiry_date__lt=today,
+                    expiry_date__gte=today - timedelta(days=EXPIRED_WINDOW_DAYS),
+                )
             )
             .exclude(Exists(renewed))
             .select_related("property")
@@ -466,15 +467,17 @@ class AlertsDashboardAPIView(APIView):
             is_expired = days < 0
             days_ago = abs(days)
 
-            alerts.append({
-                "title": f"{name} Expired" if is_expired else f"{name} Renewal Due",
-                "property": cert.property.address or cert.property.property_name,
-                "detail": None if is_expired else f"Expires in {days} days",
-                "expired": (
-                    f"Expired {days_ago} day{'s' if days_ago != 1 else ''} ago"
-                    if is_expired else None
-                ),
-                "expiry_date": cert.expiry_date,
-            })
+            alerts.append(
+                {
+                    "title": f"{name} Expired" if is_expired else f"{name} Renewal Due",
+                    "property": cert.property.address or cert.property.property_name,
+                    "detail": (
+                        f"Expired {days_ago} day{'s' if days_ago != 1 else ''} ago"
+                        if is_expired
+                        else f"Expires in {days} days"
+                    ),
+                    "days": days,
+                }
+            )
 
         return Response(alerts)
