@@ -1,11 +1,14 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
-
+from django.db.models import Exists, OuterRef
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import RetrieveAPIView
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.authentication.models import Permission
 from apps.organisation.enums import OrganisationRoleChoices
@@ -422,3 +425,40 @@ class DashboardIncomeExpenseDashboardView(RetrieveAPIView):
             "net": total_income - total_expense,
             "data": data,
         }
+
+
+EXPIRED_ALERT_DAYS = [3, 15, 30]
+class AlertsDashboardAPIView(APIView):
+    permission_classes = [IsSuperAdmin | IsLandlord]
+
+    def get(self, request):
+        organisation = get_request_organisation(request)
+        today = timezone.localdate()
+
+        renewed = ComplianceAndCertification.objects.filter(
+            property=OuterRef("property"),
+            certificate_type=OuterRef("certificate_type"),
+            expiry_date__gt=OuterRef("expiry_date"),
+        )
+
+        certificates = (
+            ComplianceAndCertification.objects.filter(
+                organisation=organisation,
+                expiry_date__in=[today - timedelta(days=d) for d in EXPIRED_ALERT_DAYS],
+            )
+            .exclude(Exists(renewed))
+            .select_related("property")
+            .order_by("-expiry_date")
+        )
+
+        alerts = []
+        for cert in certificates:
+            days_ago = (today - cert.expiry_date).days
+            alerts.append({
+                "title": f"{cert.get_certificate_type_display()} Expired",
+                "property": cert.property.address or cert.property.property_name,
+                "detail": f"Expired {days_ago} days ago",
+                "expiry_date": cert.expiry_date,
+            })
+
+        return Response(alerts)
