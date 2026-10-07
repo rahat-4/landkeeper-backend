@@ -428,6 +428,8 @@ class DashboardIncomeExpenseDashboardView(RetrieveAPIView):
 
 
 ALERT_DAYS = [30, 15, 3]
+
+
 class AlertsDashboardAPIView(APIView):
     permission_classes = [IsSuperAdmin | IsLandlord]
 
@@ -441,10 +443,13 @@ class AlertsDashboardAPIView(APIView):
             expiry_date__gt=OuterRef("expiry_date"),
         )
 
+        upcoming_dates = [today + timedelta(days=d) for d in ALERT_DAYS]
+        expired_dates = [today - timedelta(days=d) for d in ALERT_DAYS]
+
         certificates = (
             ComplianceAndCertification.objects.filter(
                 organisation=organisation,
-                expiry_date__in=[today + timedelta(days=d) for d in ALERT_DAYS],
+                expiry_date__in=upcoming_dates + expired_dates,
             )
             .exclude(Exists(renewed))
             .select_related("property")
@@ -460,8 +465,8 @@ class AlertsDashboardAPIView(APIView):
             alerts.append({
                 "title": f"{name} Expired" if is_expired else f"{name} Renewal Due",
                 "property": cert.property.address or cert.property.property_name,
-                "detail": None if is_expired else f"Expires in {days} days".upper(),
-                "expired": f"Expired {abs(days)} days ago".upper() if is_expired else None,
+                "detail": None if is_expired else f"Expires in {days} days",
+                "expired": f"Expired {abs(days)} days ago" if is_expired else None,
                 "expiry_date": cert.expiry_date,
             })
 
