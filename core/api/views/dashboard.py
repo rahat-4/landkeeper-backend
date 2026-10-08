@@ -444,16 +444,11 @@ class AlertsDashboardAPIView(APIView):
             expiry_date__gt=OuterRef("expiry_date"),
         )
 
-        upcoming_dates = [today + timedelta(days=d) for d in ALERT_DAYS]
-
         certificates = (
-            ComplianceAndCertification.objects.filter(organisation=organisation)
-            .filter(
-                Q(expiry_date__in=upcoming_dates)
-                | Q(
-                    expiry_date__lt=today,
-                    expiry_date__gte=today - timedelta(days=EXPIRED_WINDOW_DAYS),
-                )
+            ComplianceAndCertification.objects.filter(
+                organisation=organisation,
+                expiry_date__gte=today - timedelta(days=EXPIRED_WINDOW_DAYS),
+                expiry_date__lte=today + timedelta(days=max(ALERT_DAYS)),
             )
             .exclude(Exists(renewed))
             .select_related("property")
@@ -474,7 +469,7 @@ class AlertsDashboardAPIView(APIView):
                     "detail": (
                         f"Expired {days_ago} day{'s' if days_ago != 1 else ''} ago"
                         if is_expired
-                        else f"Expires in {days} days"
+                        else f"Expires in {days} day{'s' if days != 1 else ''}"
                     ),
                     "days": days,
                 }
