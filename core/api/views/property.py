@@ -329,19 +329,20 @@ class FinanceDetailView(RetrieveUpdateDestroyAPIView):
 
 
 class PropertyOnboardingAPIView(APIView):
-    permission_classes = [IsLandlord | IsAdmin]
+    permission_classes = [IsLandlord | IsAdmin | IsSuperAdmin]
 
     def post(self, request, *args, **kwargs):
+        organisation = get_request_organisation(request)
         serializer = PropertyOnboardingSerializer(
             data=request.data,
-            context={"request": request},
+            context={"request": request, "organisation": organisation},
         )
         serializer.is_valid(raise_exception=True)
         return Response(serializer.save(), status=status.HTTP_200_OK)
 
 
 class PropertyPortfolioExportView(APIView):
-    permission_classes = [IsLandlord | IsAdmin | IsMortgageAdviser]
+    permission_classes = [IsLandlord | IsAdmin | IsMortgageAdviser | IsSuperAdmin ]
 
     HEADERS = [
         "Property Address",
@@ -373,7 +374,7 @@ class PropertyPortfolioExportView(APIView):
                 status=400,
             )
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return HttpResponse("You are not part of any organisation.", status=400)
 

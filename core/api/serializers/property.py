@@ -757,18 +757,13 @@ class PropertyOnboardingSerializer(serializers.Serializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        request = self.context["request"]
+        organisation = self.context.get("organisation")
 
-        organisation_user = request.user.organisation_users.select_related(
-            "organisation"
-        ).first()
-
-        if not organisation_user:
+        if not organisation:
             raise serializers.ValidationError(
-                {"organisation": ["User is not linked to any organisation."]}
+                {"organisation": ["Organisation context is required."]}
             )
 
-        organisation = organisation_user.organisation
         property_obj = None
         results = {}
 
