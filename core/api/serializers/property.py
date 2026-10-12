@@ -8,7 +8,7 @@ from rest_framework import serializers
 from apps.authentication.models import InviteUser
 from apps.organisation.enums import OrganisationRoleChoices
 from apps.organisation.utils import get_request_organisation
-from apps.property.enums import PropertyOwnerType
+from apps.property.enums import PropertyOwnerType, CertificateType
 from apps.property.models import (
     Property,
     Mortgage,
@@ -492,12 +492,29 @@ class ComplianceAndCertificationSerializers(serializers.ModelSerializer):
 
 
 class ComplianceShareSerializer(serializers.Serializer):
-    tenant = serializers.ListField(child=serializers.CharField(), allow_empty=False)
+    tenant = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+    certificate_type = serializers.ListField(
+        child=serializers.ChoiceField(choices=CertificateType.choices),
+        allow_empty=False,
+    )
+
+    def _dedupe(self, value):
+        seen = set()
+        result = []
+        for x in value:
+            if x not in seen:
+                seen.add(x)
+                result.append(x)
+        return result
 
     def validate_tenant(self, value):
-        seen = set()
-        deduped = [x for x in value if not (x in seen or seen.add(x))]
-        return deduped
+        return self._dedupe(value)
+
+    def validate_certificate_type(self, value):
+        return self._dedupe(value)
 
 
 class UploadDocumentSerializer(serializers.ModelSerializer):

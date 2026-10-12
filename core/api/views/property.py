@@ -876,12 +876,10 @@ class PropertyPortfolioExportView(APIView):
 
 class ComplianceAndCertificationShareView(APIView):
     serializer_class = ComplianceShareSerializer
-    permission_classes = [IsLandlord | IsAdmin]
+    permission_classes = [IsSuperAdmin | IsLandlord | IsAdmin]
 
     def get_compliance(self):
-        organisation = self.request.user.get_organisation()
-        if not organisation:
-            raise NotFound("Organisation not found for the user.")
+        organisation = get_request_organisation(self.request)
         return get_object_or_404(
             ComplianceAndCertification,
             alias=self.kwargs["compliance_alias"],
@@ -903,6 +901,22 @@ class ComplianceAndCertificationShareView(APIView):
             )
         return tenants
 
+    def _resolve_certificates(self, compliance, certificate_types):
+        certificates = ComplianceAndCertification.objects.filter(
+            property=compliance.property,
+            organisation=compliance.organisation,
+            certificate_type__in=certificate_types,
+        )
+        if not certificates.exists():
+            raise ValidationError(
+                {
+                    "certificate_type": (
+                        "This property has no certificates of the selected type(s)."
+                    )
+                }
+            )
+        return certificates
+
     def get(self, request, *args, **kwargs):
         compliance = self.get_compliance()
         tenants = Tenant.objects.filter(
@@ -910,14 +924,9 @@ class ComplianceAndCertificationShareView(APIView):
             organisation=compliance.organisation,
         ).order_by("-created_at")
 
-        # Apply pagination
         paginator = PageNumberPagination()
         paginator.page_size = 10
-        page = paginator.paginate_queryset(
-            tenants,
-            request,
-            view=self,
-        )
+        page = paginator.paginate_queryset(tenants, request, view=self)
         serializer = TenantSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
@@ -925,21 +934,28 @@ class ComplianceAndCertificationShareView(APIView):
         compliance = self.get_compliance()
         serializer = ComplianceShareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        tenant_aliases = serializer.validated_data["tenant"]
 
         tenants = self._resolve_tenants(
             compliance,
-            tenant_aliases,
+            serializer.validated_data["tenant"],
+        )
+        certificates = self._resolve_certificates(
+            compliance,
+            serializer.validated_data["certificate_type"],
         )
 
-        for tenant in tenants:
-            ComplianceShare.objects.get_or_create(
-                compliance=compliance,
-                tenant=tenant,
-            )
+        shares = [
+            ComplianceShare(compliance=certificate, tenant=tenant)
+            for certificate in certificates
+            for tenant in tenants
+        ]
+        ComplianceShare.objects.bulk_create(shares, ignore_conflicts=True)
 
         return Response(
-            {"detail": "Compliance certificate shared."},
+            {
+                "detail": "Compliance certificate(s) shared.",
+                "shared_types": sorted({c.certificate_type for c in certificates}),
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -947,15 +963,18 @@ class ComplianceAndCertificationShareView(APIView):
         compliance = self.get_compliance()
         serializer = ComplianceShareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        tenant_aliases = serializer.validated_data["tenant"]
 
         tenants = self._resolve_tenants(
             compliance,
-            tenant_aliases,
+            serializer.validated_data["tenant"],
+        )
+        certificates = self._resolve_certificates(
+            compliance,
+            serializer.validated_data["certificate_type"],
         )
 
         deleted_count, _ = ComplianceShare.objects.filter(
-            compliance=compliance,
+            compliance__in=certificates,
             tenant__in=tenants,
         ).delete()
 
