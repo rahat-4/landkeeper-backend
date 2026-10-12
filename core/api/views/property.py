@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import (
     ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView,
+    RetrieveUpdateDestroyAPIView, ListAPIView,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import ValidationError
@@ -874,9 +874,15 @@ class PropertyPortfolioExportView(APIView):
         return buffer
 
 
-class ComplianceAndCertificationShareView(APIView):
-    serializer_class = ComplianceShareSerializer
+
+class ComplianceAndCertificationShareView(ListCreateAPIView):
     permission_classes = [IsSuperAdmin | IsLandlord | IsAdmin]
+    pagination_class = PageNumberPagination
+
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return TenantSerializer
+        return ComplianceShareSerializer
 
     def get_compliance(self):
         organisation = get_request_organisation(self.request)
@@ -886,102 +892,74 @@ class ComplianceAndCertificationShareView(APIView):
             organisation=organisation,
         )
 
-    def _resolve_tenants(self, compliance, tenant_aliases):
+    def get_queryset(self):
+        compliance = self.get_compliance()
+        return (
+            Tenant.objects.filter(
+                organisation=compliance.organisation,
+                compliance_shares__compliance__property=compliance.property,
+            )
+            .distinct()
+            .order_by("-created_at")
+        )
+
+    def create(self, request, *args, **kwargs):
+        compliance = self.get_compliance()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        tenant_aliases = serializer.validated_data["tenant"]
         tenants = Tenant.objects.filter(
             alias__in=tenant_aliases,
             organisation=compliance.organisation,
         )
-        found_aliases = {
-            str(alias) for alias in tenants.values_list("alias", flat=True)
-        }
-        missing = [alias for alias in tenant_aliases if str(alias) not in found_aliases]
+        found = {str(a) for a in tenants.values_list("alias", flat=True)}
+        missing = [str(a) for a in tenant_aliases if str(a) not in found]
         if missing:
-            raise ValidationError(
-                {"tenant": f"Unknown tenant alias(es): {', '.join(missing)}"}
-            )
-        return tenants
+            raise ValidationError({"tenant": f"Unknown tenant alias(es): {', '.join(missing)}"})
 
-    def _resolve_certificates(self, compliance, certificate_types):
         certificates = ComplianceAndCertification.objects.filter(
             property=compliance.property,
             organisation=compliance.organisation,
-            certificate_type__in=certificate_types,
+            certificate_type__in=serializer.validated_data["certificate_type"],
         )
         if not certificates.exists():
             raise ValidationError(
-                {
-                    "certificate_type": (
-                        "This property has no certificates of the selected type(s)."
-                    )
-                }
+                {"certificate_type": "This property has no certificates of the selected type(s)."}
             )
-        return certificates
 
-    def get(self, request, *args, **kwargs):
-        compliance = self.get_compliance()
-        tenants = Tenant.objects.filter(
-            compliance_shares__compliance=compliance,
-            organisation=compliance.organisation,
-        ).order_by("-created_at")
-
-        paginator = PageNumberPagination()
-        paginator.page_size = 10
-        page = paginator.paginate_queryset(tenants, request, view=self)
-        serializer = TenantSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-    def post(self, request, *args, **kwargs):
-        compliance = self.get_compliance()
-        serializer = ComplianceShareSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        tenants = self._resolve_tenants(
-            compliance,
-            serializer.validated_data["tenant"],
-        )
-        certificates = self._resolve_certificates(
-            compliance,
-            serializer.validated_data["certificate_type"],
+        ComplianceShare.objects.bulk_create(
+            [
+                ComplianceShare(compliance=certificate, tenant=tenant)
+                for certificate in certificates
+                for tenant in tenants
+            ],
+            ignore_conflicts=True,
         )
 
-        shares = [
-            ComplianceShare(compliance=certificate, tenant=tenant)
-            for certificate in certificates
-            for tenant in tenants
-        ]
-        ComplianceShare.objects.bulk_create(shares, ignore_conflicts=True)
-
+        tenant_names = ", ".join(t.get_full_name() for t in tenants)
         return Response(
             {
-                "detail": "Compliance certificate(s) shared.",
+                "detail": f"Certificate shared with {tenant_names}.",
                 "shared_types": sorted({c.certificate_type for c in certificates}),
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
         )
 
     def delete(self, request, *args, **kwargs):
         compliance = self.get_compliance()
-        serializer = ComplianceShareSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        tenants = self._resolve_tenants(
-            compliance,
-            serializer.validated_data["tenant"],
-        )
-        certificates = self._resolve_certificates(
-            compliance,
-            serializer.validated_data["certificate_type"],
+        tenant = get_object_or_404(
+            Tenant,
+            alias=request.query_params.get("tenant"),
+            organisation=compliance.organisation,
         )
 
-        deleted_count, _ = ComplianceShare.objects.filter(
-            compliance__in=certificates,
-            tenant__in=tenants,
+        ComplianceShare.objects.filter(
+            tenant=tenant,
+            compliance__property=compliance.property,
         ).delete()
 
         return Response(
-            {
-                "detail": "Access revoked.",
-                "revoked_count": deleted_count,
-            },
+            {"detail": f"Certificate access removed for {tenant.get_full_name()}."},
             status=status.HTTP_200_OK,
         )

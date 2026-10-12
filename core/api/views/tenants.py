@@ -3,7 +3,7 @@ from django.conf import settings
 import uuid
 from io import BytesIO
 import stripe
-from rest_framework.exceptions import NotFound
+from django.db.models import Exists, OuterRef
 from datetime import date, timedelta
 from django.db import transaction
 from django.db.models import Value, CharField
@@ -47,7 +47,7 @@ from apps.organisation.stripe_connect import (
     sync_account_status_from_stripe,
 )
 from apps.organisation.utils import get_request_organisation
-from apps.property.models import Tenant, ComplianceAndCertification, Property
+from apps.property.models import Tenant, ComplianceAndCertification, Property, ComplianceShare
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
     PaymentProviderChoices,
@@ -747,7 +747,7 @@ class TenantSharedComplianceListView(ListAPIView):
 
 class TenantListAPiView(ListAPIView):
     serializer_class = TenantSerializer
-    permission_classes = [IsLandlord | IsAdmin]
+    permission_classes = [IsSuperAdmin | IsLandlord | IsAdmin]
     pagination_class = None
     search_fields = [
         "property__property_name",
@@ -758,28 +758,19 @@ class TenantListAPiView(ListAPIView):
     ]
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
-        if not organisation:
-            raise NotFound("Organisation not found for the user.")
+        organisation = get_request_organisation(self.request)
 
-        queryset = (
+        shared_tenant_ids = ComplianceShare.objects.filter(
+            tenant__organisation=organisation,
+        ).values_list("tenant_id", flat=True)
+
+        return (
             Tenant.objects.filter(organisation=organisation)
+            .exclude(id__in=shared_tenant_ids)
             .select_related("property")
             .order_by("-created_at")
         )
 
-        property_alias = self.request.query_params.get("property_alias")
-        if property_alias:
-            queryset = queryset.filter(property__alias=property_alias)
-
-        compliance_alias = self.request.query_params.get("compliance_alias")
-        if compliance_alias:
-            queryset = queryset.exclude(
-                compliance_shares__compliance__alias=compliance_alias,
-                compliance_shares__compliance__organisation=organisation,
-            )
-
-        return queryset
 
 class TenantPaymentsListAPIView(ListAPIView):
     permission_classes = [IsLandlord | IsSuperAdmin]
