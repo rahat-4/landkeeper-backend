@@ -496,25 +496,9 @@ class ComplianceShareSerializer(serializers.Serializer):
         child=serializers.CharField(),
         allow_empty=False,
     )
-    certificate_type = serializers.ListField(
-        child=serializers.ChoiceField(choices=CertificateType.choices),
-        allow_empty=False,
-    )
-
-    def _dedupe(self, value):
-        seen = set()
-        result = []
-        for x in value:
-            if x not in seen:
-                seen.add(x)
-                result.append(x)
-        return result
 
     def validate_tenant(self, value):
-        return self._dedupe(value)
-
-    def validate_certificate_type(self, value):
-        return self._dedupe(value)
+        return list(dict.fromkeys(value))
 
 
 class UploadDocumentSerializer(serializers.ModelSerializer):
