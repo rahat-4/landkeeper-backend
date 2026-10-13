@@ -760,13 +760,9 @@ class TenantListAPiView(ListAPIView):
     def get_queryset(self):
         organisation = get_request_organisation(self.request)
 
-        shared_tenant_ids = ComplianceShare.objects.filter(
-            tenant__organisation=organisation,
-        ).values_list("tenant_id", flat=True)
-
         return (
             Tenant.objects.filter(organisation=organisation)
-            .exclude(id__in=shared_tenant_ids)
+            .exclude(compliance_shares__isnull=False)
             .select_related("property")
             .order_by("-created_at")
         )

@@ -897,7 +897,7 @@ class ComplianceAndCertificationShareView(ListCreateAPIView):
         return (
             Tenant.objects.filter(
                 organisation=compliance.organisation,
-                compliance_shares__compliance__property=compliance.property,
+                compliance_shares__compliance=compliance,
             )
             .distinct()
             .order_by("-created_at")
@@ -918,31 +918,14 @@ class ComplianceAndCertificationShareView(ListCreateAPIView):
         if missing:
             raise ValidationError({"tenant": f"Unknown tenant alias(es): {', '.join(missing)}"})
 
-        certificates = ComplianceAndCertification.objects.filter(
-            property=compliance.property,
-            organisation=compliance.organisation,
-            certificate_type__in=serializer.validated_data["certificate_type"],
-        )
-        if not certificates.exists():
-            raise ValidationError(
-                {"certificate_type": "This property has no certificates of the selected type(s)."}
-            )
-
         ComplianceShare.objects.bulk_create(
-            [
-                ComplianceShare(compliance=certificate, tenant=tenant)
-                for certificate in certificates
-                for tenant in tenants
-            ],
+            [ComplianceShare(compliance=compliance, tenant=tenant) for tenant in tenants],
             ignore_conflicts=True,
         )
 
         tenant_names = ", ".join(t.get_full_name() for t in tenants)
         return Response(
-            {
-                "detail": f"Certificate shared with {tenant_names}.",
-                "shared_types": sorted({c.certificate_type for c in certificates}),
-            },
+            {"detail": f"Certificate shared with {tenant_names}."},
             status=status.HTTP_201_CREATED,
         )
 
@@ -956,7 +939,7 @@ class ComplianceAndCertificationShareView(ListCreateAPIView):
 
         ComplianceShare.objects.filter(
             tenant=tenant,
-            compliance__property=compliance.property,
+            compliance=compliance,
         ).delete()
 
         return Response(
