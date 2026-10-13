@@ -464,6 +464,7 @@ class AlertsDashboardAPIView(APIView):
 
             alerts.append(
                 {
+                    "alias": cert.alias,
                     "title": f"{name} Expired" if is_expired else f"{name} Renewal Due",
                     "property": cert.property.address or cert.property.property_name,
                     "detail": (

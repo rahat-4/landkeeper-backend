@@ -9,24 +9,37 @@ from apps.tenant.enums import (
     PaymentMethodStatusChoices,
     RentPaymentStatusChoices,
     MaintenanceCategory,
-    MaintenanceStatus
+    MaintenanceStatus,
 )
 from common.models import CreatedAtUpdatedAtBaseModel, DocumentFile
 
 
 class PaymentMethod(CreatedAtUpdatedAtBaseModel):
     tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="payment_methods", null=True, blank=True,
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="payment_methods",
+        null=True,
+        blank=True,
     )
     organisation = models.ForeignKey(
-        "organisation.Organisation", on_delete=models.CASCADE, related_name="payment_methods", null=True, blank=True,
+        "organisation.Organisation",
+        on_delete=models.CASCADE,
+        related_name="payment_methods",
+        null=True,
+        blank=True,
     )
     provider = models.CharField(max_length=20, choices=PaymentProviderChoices.choices)
-    method_type = models.CharField(max_length=20, choices=PaymentMethodTypeChoices.choices)
+    method_type = models.CharField(
+        max_length=20, choices=PaymentMethodTypeChoices.choices
+    )
     provider_customer_id = models.CharField(max_length=128, blank=True, null=True)
     provider_payment_method_id = models.CharField(max_length=128, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=PaymentMethodStatusChoices.choices,
-                              default=PaymentMethodStatusChoices.PENDING)
+    status = models.CharField(
+        max_length=20,
+        choices=PaymentMethodStatusChoices.choices,
+        default=PaymentMethodStatusChoices.PENDING,
+    )
     is_default = models.BooleanField(default=False)
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
     card_brand = models.CharField(max_length=32, blank=True, null=True)
@@ -42,8 +55,8 @@ class PaymentMethod(CreatedAtUpdatedAtBaseModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                        models.Q(tenant__isnull=False, organisation__isnull=True)
-                        | models.Q(tenant__isnull=True, organisation__isnull=False)
+                    models.Q(tenant__isnull=False, organisation__isnull=True)
+                    | models.Q(tenant__isnull=True, organisation__isnull=False)
                 ),
                 name="payment_method_exactly_one_owner",
             ),
@@ -69,15 +82,22 @@ class CardPayment(CreatedAtUpdatedAtBaseModel):
         Tenant, on_delete=models.CASCADE, related_name="card_payments"
     )
     organisation = models.ForeignKey(
-        Organisation, on_delete=models.CASCADE, related_name="organisation_card_payments"
+        Organisation,
+        on_delete=models.CASCADE,
+        related_name="organisation_card_payments",
     )
     payment_method = models.ForeignKey(
-        PaymentMethod, on_delete=models.SET_NULL, null=True, blank=True,
+        PaymentMethod,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="card_payments",
     )
     due_date = models.DateField()
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    provider_payment_id = models.CharField(max_length=128, blank=True, null=True, db_index=True)
+    provider_payment_id = models.CharField(
+        max_length=128, blank=True, null=True, db_index=True
+    )
     status = models.CharField(
         max_length=20,
         choices=RentPaymentStatusChoices.choices,
@@ -121,12 +141,12 @@ class MaintenanceRequest(CreatedAtUpdatedAtBaseModel):
     category = models.CharField(
         max_length=32,
         choices=MaintenanceCategory.choices,
-        default=MaintenanceCategory.PLUMBING,
+        default=MaintenanceCategory.PLUMBING_WATER,
     )
     current_status = models.CharField(
         max_length=20,
         choices=MaintenanceStatus.choices,
-        default=MaintenanceStatus.SUBMITTED
+        default=MaintenanceStatus.SUBMITTED,
     )
     notes = models.TextField(null=True, blank=True)
     is_emergency = models.BooleanField(default=False)
@@ -195,8 +215,8 @@ class MaintenanceRequestComment(CreatedAtUpdatedAtBaseModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                        models.Q(staff_author__isnull=False, tenant_author__isnull=True)
-                        | models.Q(staff_author__isnull=True, tenant_author__isnull=False)
+                    models.Q(staff_author__isnull=False, tenant_author__isnull=True)
+                    | models.Q(staff_author__isnull=True, tenant_author__isnull=False)
                 ),
                 name="maintenance_comment_single_author",
             )
