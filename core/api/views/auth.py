@@ -47,7 +47,9 @@ from ..serializers.auth import (
     TenantAcceptInviteSerializer,
 )
 from django.shortcuts import get_object_or_404
+
 logger = logging.getLogger(__name__)
+
 
 class AccountRegistrationView(CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -188,9 +190,7 @@ class GoogleLoginView(SocialLoginView):
         self.request = request
 
         data = (
-            request.data.copy()
-            if hasattr(request.data, "copy")
-            else dict(request.data)
+            request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
         )
 
         access_token = data.get("access_token")
@@ -222,9 +222,7 @@ class GoogleLoginView(SocialLoginView):
         if email:
             email = email.lower().strip()
 
-            tenant = Tenant.objects.filter(
-                email__iexact=email
-            ).first()
+            tenant = Tenant.objects.filter(email__iexact=email).first()
 
             if tenant is not None:
                 return self._tenant_login_response(tenant)
@@ -247,9 +245,7 @@ class GoogleLoginView(SocialLoginView):
 
     def _create_default_organisation(self, user):
         with transaction.atomic():
-            locked_user = User.objects.select_for_update().get(
-                pk=user.pk
-            )
+            locked_user = User.objects.select_for_update().get(pk=user.pk)
 
             if Referral.objects.filter(user=locked_user).exists():
                 return
@@ -259,8 +255,7 @@ class GoogleLoginView(SocialLoginView):
 
             organisation = Organisation.objects.create(
                 name=(
-                    f"{locked_user.first_name or locked_user.email}"
-                    "'s Organisation"
+                    f"{locked_user.first_name or locked_user.email}" "'s Organisation"
                 )
             )
 
@@ -308,9 +303,7 @@ class GoogleLoginView(SocialLoginView):
             return google_user.get("email")
 
         except requests.RequestException:
-            logger.warning(
-                "Could not retrieve verified Google user information."
-            )
+            logger.warning("Could not retrieve verified Google user information.")
             return None
 
     def get_response(self):
@@ -319,9 +312,7 @@ class GoogleLoginView(SocialLoginView):
         if Referral.objects.filter(user=self.user).exists():
             response.data["user"]["user_type"] = None
         else:
-            response.data["user"]["user_type"] = (
-                get_user_type_label(self.user)
-            )
+            response.data["user"]["user_type"] = get_user_type_label(self.user)
 
         return response
 
@@ -684,6 +675,7 @@ class AcceptInviteView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
 
 class TenantSendInviteView(APIView):
     permission_classes = [IsSuperAdmin | IsLandlord]

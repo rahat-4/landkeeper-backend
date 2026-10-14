@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework.exceptions import APIException
+from rest_framework import status
 from apps.authentication.models import EmailVerification, InviteUser
 from apps.authentication.enums import NameTitleChoices
 from apps.organisation.models import (
@@ -21,6 +23,20 @@ from apps.referral.utils import get_coupon_code
 from api.utils import send_verification_email
 
 User = get_user_model()
+
+
+class AffonsoRegistrationError(APIException):
+    status_code = status.HTTP_502_BAD_GATEWAY
+    default_detail = "Failed to create the referral account."
+    default_code = "affonso_error"
+
+
+class AffiliateAlreadyExistsError(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "An affiliate with this email already exists in the referral program."
+    )
+    default_code = "affiliate_already_exists"
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -54,39 +70,54 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        with transaction.atomic():
-            password = validated_data.pop("password")
-            is_referral = validated_data.pop("is_referral", False)
+        password = validated_data.pop("password")
+        is_referral = validated_data.pop("is_referral", False)
 
-            # Create user
+        with transaction.atomic():
             user = User(**validated_data)
             user.set_password(password)
             user.is_active = False
             user.save()
 
             if is_referral:
-                # Create referral profile for the user
                 affonso_api = AffonsoAPI()
-                affiliate = affonso_api.create_affiliate(user)
-                coupon = affonso_api.create_coupon(
-                    affiliate_id=affiliate.get("id"),
-                    code=get_coupon_code(user),
-                )
+
+                try:
+                    affiliate = affonso_api.create_affiliate(user)
+
+                    coupon_code = get_coupon_code(user)
+                    coupon = affonso_api.create_coupon(
+                        affiliate_id=affiliate["id"],
+                        code=coupon_code,
+                    )
+
+                except Exception as exc:
+                    error_message = str(exc)
+
+                    if (
+                        "DUPLICATE_ERROR" in error_message
+                        or "already exists in this program" in error_message
+                    ):
+                        raise AffiliateAlreadyExistsError() from exc
+
+                    raise AffonsoRegistrationError() from exc
+
                 Referral.objects.create(
                     user=user,
-                    affiliate_id=affiliate.get("id"),
-                    coupon_code=coupon.get("code"),
+                    affiliate_id=affiliate["id"],
+                    coupon_code=coupon.get("code", coupon_code),
                 )
+
             else:
-                # Create default organisation
                 organisation = Organisation.objects.create(
                     name=f"{user.first_name}'s Organisation"
                 )
 
-                # Add user as OWNER in organisation
-                OrganisationUser.objects.create(user=user, organisation=organisation)
+                OrganisationUser.objects.create(
+                    user=user,
+                    organisation=organisation,
+                )
 
-            # Create verification code and send email
             code = EmailVerification.make_code()
             EmailVerification.objects.create(user=user, code=code)
             send_verification_email(user, code)
