@@ -749,6 +749,7 @@ class TenantListAPiView(ListAPIView):
     serializer_class = TenantSerializer
     permission_classes = [IsSuperAdmin | IsLandlord | IsAdmin]
     pagination_class = None
+
     search_fields = [
         "property__property_name",
         "first_name",
@@ -760,12 +761,20 @@ class TenantListAPiView(ListAPIView):
     def get_queryset(self):
         organisation = get_request_organisation(self.request)
 
-        return (
-            Tenant.objects.filter(organisation=organisation)
-            .exclude(compliance_shares__isnull=False)
-            .select_related("property")
-            .order_by("-created_at")
-        )
+        property_alias = self.request.query_params.get("property_alias", "")
+        compliance_alias = self.request.query_params.get("compliance_alias", "")
+
+        queryset = Tenant.objects.filter(
+            organisation=organisation,
+        ).order_by("-created_at")
+
+        if property_alias:
+            queryset = queryset.filter(property__alias=property_alias)
+
+        if compliance_alias:
+            queryset = queryset.filter(compliance_shares__compliance__alias=compliance_alias)
+
+        return queryset
 
 
 class TenantPaymentsListAPIView(ListAPIView):
