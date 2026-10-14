@@ -342,3 +342,8 @@ STRIPE_CONNECT_REDIRECT_URI = config(
     "STRIPE_CONNECT_REDIRECT_URI",
     default=f"{FRONTEND_URL}/client/profile-settings",
 )
+
+
+# Affonso API
+AFFONSO_URL = config("AFFONSO_URL", default="https://api.affonso.io/v1")
+AFFONSO_API_KEY = config("AFFONSO_API_KEY", default="")

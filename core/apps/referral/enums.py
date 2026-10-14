@@ -2,7 +2,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
-class AmbassadorStatusChoices(models.TextChoices):
+class ReferralStatus(models.TextChoices):
     PENDING = "PENDING", _("Pending")
     ELIGIBLE = "ELIGIBLE", _("Eligible")
     ACTIVE = "ACTIVE", _("Active")

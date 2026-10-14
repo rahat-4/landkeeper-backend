@@ -27,7 +27,6 @@ from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView, ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from apps.authentication.signals import create_default_organisation
 from apps.organisation.enums import OrganisationRoleChoices
 from apps.organisation.models import OrganisationUser
 from apps.organisation.utils import get_request_organisation
@@ -53,10 +52,6 @@ class AccountRegistrationView(CreateAPIView):
 
     def get_queryset(self):
         return User.objects.all()
-
-    def perform_create(self, serializer):
-        user = serializer.save()
-        create_default_organisation(user)
 
 
 class EmailVerifyView(APIView):

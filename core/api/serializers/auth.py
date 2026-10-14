@@ -1,6 +1,6 @@
 import math
+import random
 
-from dj_rest_auth.registration.serializers import SocialLoginSerializer
 from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -14,6 +14,10 @@ from apps.organisation.models import (
     OrganisationSubscription,
 )
 from apps.property.models import Tenant
+from apps.referral.models import Referral
+from apps.referral.affonso import AffonsoAPI
+from apps.referral.utils import get_coupon_code
+
 from api.utils import send_verification_email
 
 User = get_user_model()
@@ -21,6 +25,9 @@ User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    is_referral = serializers.BooleanField(
+        write_only=True, required=False, default=False
+    )
 
     class Meta:
         model = User
@@ -33,6 +40,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "password",
+            "is_referral",
         ]
 
     def validate_email(self, value):
@@ -48,6 +56,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         with transaction.atomic():
             password = validated_data.pop("password")
+            is_referral = validated_data.pop("is_referral", False)
 
             # Create user
             user = User(**validated_data)
@@ -55,18 +64,27 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             user.is_active = False
             user.save()
 
-            # # Assign FREE subscription
-            # free_plan = SubscriptionPlan.objects.filter(name__iexact="free").first()
-            # if not free_plan:
-            #     raise serializers.ValidationError("Free plan is not configured.")
+            if is_referral:
+                # Create referral profile for the user
+                affonso_api = AffonsoAPI()
+                affiliate = affonso_api.create_affiliate(user)
+                coupon = affonso_api.create_coupon(
+                    affiliate_id=affiliate.get("id"),
+                    code=get_coupon_code(user),
+                )
+                Referral.objects.create(
+                    user=user,
+                    affiliate_id=affiliate.get("id"),
+                    coupon_code=coupon.get("code"),
+                )
+            else:
+                # Create default organisation
+                organisation = Organisation.objects.create(
+                    name=f"{user.first_name}'s Organisation"
+                )
 
-            # Create default organisation
-            organisation = Organisation.objects.create(
-                name=f"{user.first_name}'s Organisation"
-            )
-
-            # Add user as OWNER in organisation
-            OrganisationUser.objects.create(user=user, organisation=organisation)
+                # Add user as OWNER in organisation
+                OrganisationUser.objects.create(user=user, organisation=organisation)
 
             # Create verification code and send email
             code = EmailVerification.make_code()
