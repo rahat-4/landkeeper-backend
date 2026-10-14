@@ -1,5 +1,7 @@
 from datetime import timedelta
 import requests
+import logging
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
@@ -28,9 +30,10 @@ from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView, ListAP
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from apps.organisation.enums import OrganisationRoleChoices
-from apps.organisation.models import OrganisationUser
+from apps.organisation.models import OrganisationUser, Organisation
 from apps.organisation.utils import get_request_organisation
 from apps.property.models import Tenant
+from apps.referral.models import Referral
 from common.permission import IsLandlord, IsSuperAdmin, IsAdmin
 from allauth.socialaccount.providers.oauth2.client import OAuth2Error
 from api.serializers.organisation import OrganisationUserSerializer
@@ -44,7 +47,7 @@ from ..serializers.auth import (
     TenantAcceptInviteSerializer,
 )
 from django.shortcuts import get_object_or_404
-
+logger = logging.getLogger(__name__)
 
 class AccountRegistrationView(CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -183,25 +186,34 @@ class GoogleLoginView(SocialLoginView):
 
     def post(self, request, *args, **kwargs):
         self.request = request
+
         data = (
-            request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+            request.data.copy()
+            if hasattr(request.data, "copy")
+            else dict(request.data)
         )
 
         access_token = data.get("access_token")
+
+        # Support either a Google access token or authorization code.
         if not access_token:
             code = data.get("code")
+
             if not code:
                 return Response(
                     {"detail": "access_token or code is required."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
             try:
                 access_token = self._exchange_code_for_access_token(code)
-            except OAuth2Error:
+            except Exception:
+                logger.exception("Google authorization-code exchange failed.")
                 return Response(
                     {"detail": "Unable to authenticate with Google."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
             data["access_token"] = access_token
             data.pop("code", None)
 
@@ -210,16 +222,52 @@ class GoogleLoginView(SocialLoginView):
         if email:
             email = email.lower().strip()
 
-            tenant = Tenant.objects.filter(email__iexact=email).first()
+            tenant = Tenant.objects.filter(
+                email__iexact=email
+            ).first()
 
             if tenant is not None:
                 return self._tenant_login_response(tenant)
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
+
         self.serializer = serializer
         self.login()
+
+        user = self.user
+
+        # Referral users must not receive a default Organisation.
+        is_referral = Referral.objects.filter(user=user).exists()
+
+        if not is_referral:
+            self._create_default_organisation(user)
+
         return self.get_response()
+
+    def _create_default_organisation(self, user):
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(
+                pk=user.pk
+            )
+
+            if Referral.objects.filter(user=locked_user).exists():
+                return
+
+            if locked_user.get_organisation():
+                return
+
+            organisation = Organisation.objects.create(
+                name=(
+                    f"{locked_user.first_name or locked_user.email}"
+                    "'s Organisation"
+                )
+            )
+
+            OrganisationUser.objects.create(
+                user=locked_user,
+                organisation=organisation,
+            )
 
     def _exchange_code_for_access_token(self, code):
         adapter = self.adapter_class(self.request)
@@ -237,24 +285,44 @@ class GoogleLoginView(SocialLoginView):
             headers=adapter.headers,
             basic_auth=adapter.basic_auth,
         )
+
         token = client.get_access_token(code)
         return token["access_token"]
 
     def _get_google_email(self, access_token):
         try:
-            resp = requests.get(
+            response = requests.get(
                 "https://www.googleapis.com/oauth2/v3/userinfo",
-                params={"access_token": access_token},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                },
                 timeout=5,
             )
-            resp.raise_for_status()
-            return resp.json().get("email")
+            response.raise_for_status()
+
+            google_user = response.json()
+
+            if not google_user.get("email_verified"):
+                return None
+
+            return google_user.get("email")
+
         except requests.RequestException:
+            logger.warning(
+                "Could not retrieve verified Google user information."
+            )
             return None
 
     def get_response(self):
         response = super().get_response()
-        response.data["user"]["user_type"] = get_user_type_label(self.user)
+
+        if Referral.objects.filter(user=self.user).exists():
+            response.data["user"]["user_type"] = None
+        else:
+            response.data["user"]["user_type"] = (
+                get_user_type_label(self.user)
+            )
+
         return response
 
     def _tenant_login_response(self, tenant):
