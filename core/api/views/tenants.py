@@ -47,7 +47,12 @@ from apps.organisation.stripe_connect import (
     sync_account_status_from_stripe,
 )
 from apps.organisation.utils import get_request_organisation
-from apps.property.models import Tenant, ComplianceAndCertification, Property, ComplianceShare
+from apps.property.models import (
+    Tenant,
+    ComplianceAndCertification,
+    Property,
+    ComplianceShare,
+)
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
     PaymentProviderChoices,
@@ -69,7 +74,13 @@ from apps.notification.tasks import (
 from apps.tenant.stripe_client import create_payment_intent
 from apps.tenant.utils import get_statement_date_range
 from common.models import DocumentFile
-from common.permission import IsTenant, IsLandlord, IsAdmin, IsLettingAgent, IsSuperAdmin
+from common.permission import (
+    IsTenant,
+    IsLandlord,
+    IsAdmin,
+    IsLettingAgent,
+    IsSuperAdmin,
+)
 from api.serializers.property import (
     ComplianceAndCertificationSerializers,
     TenantSerializer,
@@ -225,7 +236,11 @@ class CardPaymentView(APIView):
             )
 
             return Response(
-                {"client_secret": intent.client_secret, "status": intent.status, "mode": "payment"},
+                {
+                    "client_secret": intent.client_secret,
+                    "status": intent.status,
+                    "mode": "payment",
+                },
                 status=status.HTTP_201_CREATED,
             )
 
@@ -240,7 +255,10 @@ class CardPaymentView(APIView):
                         "organisation_id": str(organisation.id),
                     },
                     transfer_data={"destination": organisation.stripe_account_id},
-                    automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
+                    automatic_payment_methods={
+                        "enabled": True,
+                        "allow_redirects": "never",
+                    },
                 )
             except stripe.error.StripeError as e:
                 logger.exception(
@@ -270,7 +288,11 @@ class CardPaymentView(APIView):
             )
 
             return Response(
-                {"client_secret": intent.client_secret, "status": intent.status, "mode": "setup"},
+                {
+                    "client_secret": intent.client_secret,
+                    "status": intent.status,
+                    "mode": "setup",
+                },
                 status=status.HTTP_201_CREATED,
             )
 
@@ -439,6 +461,8 @@ class RentStatementView(APIView):
 
 
 ENDING_SOON_DAYS = 30
+
+
 class PropertyTenancyListView(APIView):
     permission_classes = [IsTenant]
 
@@ -483,6 +507,7 @@ class PropertyTenancyListView(APIView):
 
         return Response(results)
 
+
 class PaymentHistoryView(ListAPIView):
     permission_classes = [IsTenant]
     serializer_class = PaymentHistorySerializer
@@ -491,8 +516,7 @@ class PaymentHistoryView(ListAPIView):
         tenant = self.request.user
 
         return (
-            CardPayment.objects
-            .filter(tenant=tenant)
+            CardPayment.objects.filter(tenant=tenant)
             .select_related("payment_method")
             .order_by("-created_at")
         )
@@ -517,7 +541,9 @@ class TenantStripeConnectWebhookView(View):
             logger.warning("TenantStripeConnectWebhookView: invalid payload")
             return HttpResponse(status=400)
         except stripe.error.SignatureVerificationError:
-            logger.warning("TenantStripeConnectWebhookView: signature verification failed")
+            logger.warning(
+                "TenantStripeConnectWebhookView: signature verification failed"
+            )
             return HttpResponse(status=400)
 
         event_type = event["type"]
@@ -527,7 +553,9 @@ class TenantStripeConnectWebhookView(View):
 
         if event_type == "payment_intent.succeeded":
             handle_tenant_payment_succeeded(data)
-            logger.info(f"TenantStripeConnectWebhookView: handled succeeded for {getattr(data, 'id', None)}")
+            logger.info(
+                f"TenantStripeConnectWebhookView: handled succeeded for {getattr(data, 'id', None)}"
+            )
 
         elif event_type == "payment_intent.payment_failed":
             handle_tenant_payment_failed(data)
@@ -772,9 +800,11 @@ class TenantListAPiView(ListAPIView):
             queryset = queryset.filter(property__alias=property_alias)
 
         if compliance_alias:
-            queryset = queryset.filter(compliance_shares__compliance__alias=compliance_alias)
+            queryset = queryset.exclude(
+                compliance_shares__compliance__alias=compliance_alias
+            )
 
-        return queryset
+        return queryset.distinct()
 
 
 class TenantPaymentsListAPIView(ListAPIView):
