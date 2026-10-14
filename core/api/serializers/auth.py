@@ -198,6 +198,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     subscription_status = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
     trial_days_left = serializers.SerializerMethodField()
+    is_referral = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -219,6 +220,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "subscription_status",
             "plan",
             "trial_days_left",
+            "is_referral",
             "created_at",
             "updated_at",
         ]
@@ -285,10 +287,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return 0
         return math.ceil(remaining.total_seconds() / 86400)
 
+    def get_is_referral(self, obj):
+        return Referral.objects.filter(user=obj).exists()
+
 
 class TenantProfileSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     is_password_available = serializers.SerializerMethodField()
+    is_referral = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
@@ -303,6 +309,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             "avatar",
             "rent_amount",
             "is_active",
+            "is_referral",
             "is_password_available",
             "created_at",
             "updated_at",
@@ -321,6 +328,9 @@ class TenantProfileSerializer(serializers.ModelSerializer):
 
     def get_is_password_available(self, obj):
         return obj.has_usable_password()
+
+    def get_is_referral(self, obj):
+        return Referral.objects.filter(tenant=obj).exists()
 
 
 class CustomJWTSerializer(JWTSerializer):
