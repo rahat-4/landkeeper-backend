@@ -33,8 +33,13 @@ class Organisation(NameSlugDescriptionBaseModel):
     address = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     # Stripe
-    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
-    stripe_account_id = models.CharField(max_length=64, blank=True, null=True, db_index=True, unique=True)
+    coupon_code = models.CharField(max_length=20, blank=True, null=True)
+    stripe_customer_id = models.CharField(
+        max_length=255, blank=True, null=True, db_index=True
+    )
+    stripe_account_id = models.CharField(
+        max_length=64, blank=True, null=True, db_index=True, unique=True
+    )
     stripe_publishable_key = models.CharField(max_length=128, blank=True, null=True)
     stripe_access_token_encrypted = models.TextField(blank=True, null=True)
     stripe_charges_enabled = models.BooleanField(default=False)
@@ -114,9 +119,7 @@ class OrganisationSubscription(CreatedAtUpdatedAtBaseModel):
     stripe_subscription_id = models.CharField(
         max_length=255, blank=True, null=True, db_index=True
     )
-    stripe_checkout_session_id = models.CharField(
-        max_length=255, blank=True, null=True
-    )
+    stripe_checkout_session_id = models.CharField(max_length=255, blank=True, null=True)
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     next_billing_date = models.DateTimeField(null=True, blank=True)

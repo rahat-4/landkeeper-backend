@@ -9,6 +9,7 @@ import stripe
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.conf import settings
+from django.db import transaction
 from rest_framework.generics import (
     ListAPIView,
     RetrieveUpdateAPIView,
@@ -16,7 +17,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
 )
 from rest_framework.views import APIView
-from rest_framework import status, serializers, response
+from rest_framework import status, serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -46,6 +47,7 @@ from apps.organisation.utils import get_request_organisation
 from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTransaction
 from apps.organisation.models import OrganisationSubscription
 from apps.property.models import Property
+from apps.referral.utils import validate_coupon
 from common.permission import IsLandlord
 
 logger = logging.getLogger(__name__)
@@ -77,181 +79,214 @@ def _release_pending_schedule(current_subscription):
 class SelectSubscriptionView(APIView):
 
     def post(self, request):
-        plan_id = request.data.get("plan_id")
-        payment_method_id = request.data.get("payment_method_id")
+        with transaction.atomic():
+            plan_id = request.data.get("plan_id")
+            payment_method_id = request.data.get("payment_method_id")
 
-        if not plan_id:
-            return Response(
-                {"detail": "plan_id is required."},
-                status=status.HTTP_400_BAD_REQUEST,
+            if not plan_id:
+                return Response(
+                    {"detail": "plan_id is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                plan = SubscriptionPlan.objects.get(alias=plan_id, is_active=True)
+            except SubscriptionPlan.DoesNotExist:
+                return Response(
+                    {"detail": "Subscription plan not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            organisation = request.user.get_organisation()
+
+            current_subscription = (
+                OrganisationSubscription.objects.filter(organisation=organisation)
+                .select_related("plan")
+                .first()
             )
 
-        try:
-            plan = SubscriptionPlan.objects.get(alias=plan_id, is_active=True)
-        except SubscriptionPlan.DoesNotExist:
-            return Response(
-                {"detail": "Subscription plan not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            coupon = None
+            coupon_code = request.data.get("coupon_code")
 
-        organisation = request.user.get_organisation()
+            if coupon_code:
+                coupon, error_response = validate_coupon(coupon_code, request.user)
+                if error_response:
+                    return error_response
 
-        current_subscription = (
-            OrganisationSubscription.objects.filter(organisation=organisation)
-            .select_related("plan")
-            .first()
-        )
+            if current_subscription:
 
-        if current_subscription:
-
-            if current_subscription.status in (
-                OrganisationSubscriptionStatus.ACTIVE,
-                OrganisationSubscriptionStatus.TRIALING,
-            ):
-                now = timezone.now()
-
-                if (
-                    current_subscription.status
-                    == OrganisationSubscriptionStatus.TRIALING
+                if current_subscription.status in (
+                    OrganisationSubscriptionStatus.ACTIVE,
+                    OrganisationSubscriptionStatus.TRIALING,
                 ):
-                    period_over = (
-                        current_subscription.trial_end_date is not None
-                        and now >= current_subscription.trial_end_date
-                    )
-                else:
-                    period_over = (
-                        current_subscription.next_billing_date is not None
-                        and now >= current_subscription.next_billing_date
+                    now = timezone.now()
+
+                    if (
+                        current_subscription.status
+                        == OrganisationSubscriptionStatus.TRIALING
+                    ):
+                        period_over = (
+                            current_subscription.trial_end_date is not None
+                            and now >= current_subscription.trial_end_date
+                        )
+                    else:
+                        period_over = (
+                            current_subscription.next_billing_date is not None
+                            and now >= current_subscription.next_billing_date
+                        )
+
+                    if not period_over:
+
+                        if current_subscription.plan_id == plan.id:
+                            return Response(
+                                {"detail": "You are already subscribed to this plan."},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                        is_upgrade_request = (
+                            plan.monthly_price > current_subscription.plan.monthly_price
+                        )
+
+                        if is_upgrade_request:
+                            try:
+                                _release_pending_schedule(current_subscription)
+
+                                result = change_subscription_plan(organisation, plan)
+                            except PlanDowngradeBlockedError as exc:
+                                return Response(
+                                    {
+                                        "detail": (
+                                            f"Cannot switch to '{plan.name}'. "
+                                            f"You currently have {exc.current_property_count} "
+                                            f"properties, but this plan only allows "
+                                            f"{exc.max_properties}. Please remove "
+                                            f"{exc.excess} properties before downgrading."
+                                        ),
+                                        "current_property_count": exc.current_property_count,
+                                        "new_plan_max_properties": exc.max_properties,
+                                        "properties_to_remove": exc.excess,
+                                    },
+                                    status=status.HTTP_400_BAD_REQUEST,
+                                )
+                            except InvalidRequestError as exc:
+                                logger.warning(
+                                    "Stripe rejected plan upgrade for org %s: %s",
+                                    organisation.id,
+                                    exc,
+                                )
+                                return Response(
+                                    {
+                                        "detail": (
+                                            "We couldn't switch your plan because a plan "
+                                            "change is already in progress on your "
+                                            "subscription. Please try again in a moment, "
+                                            "or contact support if this persists."
+                                        )
+                                    },
+                                    status=status.HTTP_409_CONFLICT,
+                                )
+
+                            return Response(
+                                {
+                                    "detail": "Plan upgraded successfully.",
+                                    "is_upgrade": True,
+                                    "account_credit": str(result["account_credit"]),
+                                    "requires_action": result["requires_action"],
+                                    "client_secret": result["client_secret"],
+                                },
+                                status=status.HTTP_200_OK,
+                            )
+                        else:
+                            try:
+                                result = schedule_plan_downgrade(organisation, plan)
+                            except PlanDowngradeBlockedError as exc:
+                                return Response(
+                                    {
+                                        "detail": (
+                                            f"Cannot switch to '{plan.name}'. "
+                                            f"You currently have {exc.current_property_count} "
+                                            f"properties, but this plan only allows "
+                                            f"{exc.max_properties}. Please remove "
+                                            f"{exc.excess} properties before downgrading."
+                                        ),
+                                        "current_property_count": exc.current_property_count,
+                                        "new_plan_max_properties": exc.max_properties,
+                                        "properties_to_remove": exc.excess,
+                                    },
+                                    status=status.HTTP_400_BAD_REQUEST,
+                                )
+                            except InvalidRequestError as exc:
+                                logger.warning(
+                                    "Stripe rejected scheduled downgrade for org %s: %s",
+                                    organisation.id,
+                                    exc,
+                                )
+                                return Response(
+                                    {
+                                        "detail": (
+                                            "We couldn't schedule that plan change "
+                                            "because a change is already in progress "
+                                            "on your subscription. Please try again "
+                                            "in a moment, or contact support if this "
+                                            "persists."
+                                        )
+                                    },
+                                    status=status.HTTP_409_CONFLICT,
+                                )
+
+                            return Response(result, status=status.HTTP_200_OK)
+
+                if current_subscription.plan_id != plan.id:
+                    current_property_count = (
+                        organisation.organisation_properties.count()
                     )
 
-                if not period_over:
-
-                    if current_subscription.plan_id == plan.id:
+                    if plan.max_properties < current_property_count:
+                        excess = current_property_count - plan.max_properties
                         return Response(
-                            {"detail": "You are already subscribed to this plan."},
+                            {
+                                "detail": (
+                                    f"Cannot switch to '{plan.name}'. "
+                                    f"You currently have {current_property_count} "
+                                    f"properties, but this plan only allows "
+                                    f"{plan.max_properties}. Please remove "
+                                    f"{excess} properties before downgrading."
+                                ),
+                                "current_property_count": current_property_count,
+                                "new_plan_max_properties": plan.max_properties,
+                                "properties_to_remove": excess,
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                    is_upgrade_request = (
-                        plan.monthly_price > current_subscription.plan.monthly_price
-                    )
+                result = create_subscription_with_client_secret(
+                    organisation=organisation,
+                    user=request.user,
+                    plan=plan,
+                    payment_method_id=payment_method_id,
+                    affonso_coupon=coupon,
+                )
+                return Response(
+                    {
+                        "subscription_id": result["subscription_id"],
+                        "client_secret": result["client_secret"],
+                        "mode": result["mode"],
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
-                    if is_upgrade_request:
-                        try:
-                            _release_pending_schedule(current_subscription)
-
-                            result = change_subscription_plan(organisation, plan)
-                        except PlanDowngradeBlockedError as exc:
-                            return Response(
-                                {
-                                    "detail": (
-                                        f"Cannot switch to '{plan.name}'. "
-                                        f"You currently have {exc.current_property_count} "
-                                        f"properties, but this plan only allows "
-                                        f"{exc.max_properties}. Please remove "
-                                        f"{exc.excess} properties before downgrading."
-                                    ),
-                                    "current_property_count": exc.current_property_count,
-                                    "new_plan_max_properties": exc.max_properties,
-                                    "properties_to_remove": exc.excess,
-                                },
-                                status=status.HTTP_400_BAD_REQUEST,
-                            )
-                        except InvalidRequestError as exc:
-                            logger.warning(
-                                "Stripe rejected plan upgrade for org %s: %s",
-                                organisation.id,
-                                exc,
-                            )
-                            return Response(
-                                {
-                                    "detail": (
-                                        "We couldn't switch your plan because a plan "
-                                        "change is already in progress on your "
-                                        "subscription. Please try again in a moment, "
-                                        "or contact support if this persists."
-                                    )
-                                },
-                                status=status.HTTP_409_CONFLICT,
-                            )
-
-                        return Response(
-                            {
-                                "detail": "Plan upgraded successfully.",
-                                "is_upgrade": True,
-                                "account_credit": str(result["account_credit"]),
-                                "requires_action": result["requires_action"],
-                                "client_secret": result["client_secret"],
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-                    else:
-                        try:
-                            result = schedule_plan_downgrade(organisation, plan)
-                        except PlanDowngradeBlockedError as exc:
-                            return Response(
-                                {
-                                    "detail": (
-                                        f"Cannot switch to '{plan.name}'. "
-                                        f"You currently have {exc.current_property_count} "
-                                        f"properties, but this plan only allows "
-                                        f"{exc.max_properties}. Please remove "
-                                        f"{exc.excess} properties before downgrading."
-                                    ),
-                                    "current_property_count": exc.current_property_count,
-                                    "new_plan_max_properties": exc.max_properties,
-                                    "properties_to_remove": exc.excess,
-                                },
-                                status=status.HTTP_400_BAD_REQUEST,
-                            )
-                        except InvalidRequestError as exc:
-                            logger.warning(
-                                "Stripe rejected scheduled downgrade for org %s: %s",
-                                organisation.id,
-                                exc,
-                            )
-                            return Response(
-                                {
-                                    "detail": (
-                                        "We couldn't schedule that plan change "
-                                        "because a change is already in progress "
-                                        "on your subscription. Please try again "
-                                        "in a moment, or contact support if this "
-                                        "persists."
-                                    )
-                                },
-                                status=status.HTTP_409_CONFLICT,
-                            )
-
-                        return Response(result, status=status.HTTP_200_OK)
-
-            if current_subscription.plan_id != plan.id:
-                current_property_count = organisation.organisation_properties.count()
-
-                if plan.max_properties < current_property_count:
-                    excess = current_property_count - plan.max_properties
-                    return Response(
-                        {
-                            "detail": (
-                                f"Cannot switch to '{plan.name}'. "
-                                f"You currently have {current_property_count} "
-                                f"properties, but this plan only allows "
-                                f"{plan.max_properties}. Please remove "
-                                f"{excess} properties before downgrading."
-                            ),
-                            "current_property_count": current_property_count,
-                            "new_plan_max_properties": plan.max_properties,
-                            "properties_to_remove": excess,
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
+            # No subscription at all yet
             result = create_subscription_with_client_secret(
                 organisation=organisation,
                 user=request.user,
                 plan=plan,
                 payment_method_id=payment_method_id,
+                affonso_coupon=coupon,
             )
+            print("Result from create_subscription_with_client_secret:", coupon)
+            organisation.coupon_code = coupon["code"] if coupon else None
+            organisation.save(update_fields=["coupon_code"])
+
             return Response(
                 {
                     "subscription_id": result["subscription_id"],
@@ -260,22 +295,6 @@ class SelectSubscriptionView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
-        # No subscription at all yet
-        result = create_subscription_with_client_secret(
-            organisation=organisation,
-            user=request.user,
-            plan=plan,
-            payment_method_id=payment_method_id,
-        )
-        return Response(
-            {
-                "subscription_id": result["subscription_id"],
-                "client_secret": result["client_secret"],
-                "mode": result["mode"],
-            },
-            status=status.HTTP_200_OK,
-        )
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -330,6 +349,37 @@ class SubscriptionPlanListView(ListAPIView):
             .prefetch_related("features")
             .order_by("monthly_price")
         )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+
+        organisation = get_request_organisation(self.request)
+
+        print("Organisation in context:", organisation)
+
+        coupon_param = self.request.query_params.get("coupon_code")
+
+        if coupon_param:
+            coupon_code = coupon_param.strip().upper()
+        else:
+            coupon_code = organisation.coupon_code if organisation else None
+
+        context["coupon"] = None
+
+        if coupon_code:
+            coupon, error_response = validate_coupon(
+                coupon_code,
+                self.request.user,
+            )
+
+            if error_response:
+                raise serializers.ValidationError(
+                    {"coupon_code": "Invalid or ineligible coupon."}
+                )
+
+            context["coupon"] = coupon
+
+        return context
 
 
 class LandlordPaymentCardUpdateDeleteAPIView(RetrieveUpdateDestroyAPIView):

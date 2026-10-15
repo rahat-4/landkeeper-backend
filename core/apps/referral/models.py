@@ -22,7 +22,7 @@ class Referral(CreatedAtUpdatedAtBaseModel):
         User, on_delete=models.CASCADE, related_name="referral_profile"
     )
     affiliate_id = models.TextField()
-    coupon_code = models.CharField(max_length=16, unique=True, editable=False)
+    coupon_code = models.CharField(max_length=16, unique=True)
     status = models.CharField(
         max_length=16,
         choices=ReferralStatus.choices,

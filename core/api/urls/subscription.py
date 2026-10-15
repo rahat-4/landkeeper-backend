@@ -9,7 +9,7 @@ from api.views.subscription import (
     LandlordSubscriptionAPIView,
     SubscriptionPermissionView,
     LandlordPaymentCardCreateAPIView,
-    CancelPendingDowngradeAPIView
+    CancelPendingDowngradeAPIView,
 )
 
 urlpatterns = [
@@ -51,7 +51,7 @@ urlpatterns = [
     path(
         "/cards",
         LandlordPaymentCardCreateAPIView.as_view(),
-        name="landlord-payment-card-list-create"
+        name="landlord-payment-card-list-create",
     ),
     path(
         "/cancel-pending-downgrade",

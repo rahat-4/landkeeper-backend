@@ -66,3 +66,28 @@ class AffonsoAPI:
             raise Exception(
                 f"Failed to create coupon: {response.status_code} - {response.text}"
             )
+
+    def get_coupon_by_code(self, code):
+        """
+        Find a coupon in Affonso by its exact code. Affonso's `search`
+        is a partial match, so the exact code is matched here.
+        """
+
+        response = requests.get(
+            f"{self.base_url}/coupons",
+            params={"search": code, "expand": "affiliate", "limit": 200},
+            headers=self.headers,
+            timeout=10,
+        )
+
+        if response.status_code != 200:
+            raise Exception(
+                f"Failed to fetch coupon: {response.status_code} - {response.text}"
+            )
+
+        code = code.upper()
+        for coupon in response.json().get("data", []):
+            if (coupon.get("code") or "").upper() == code:
+                return coupon
+
+        return None

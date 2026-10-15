@@ -9,6 +9,7 @@ from apps.subscription.models import (
     PaymentCard,
     PaymentTransaction,
 )
+from apps.referral.utils import get_discounted_price
 
 
 class SubscriptionFeatureSerializer(serializers.ModelSerializer):
@@ -27,6 +28,10 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     current_plan = serializers.SerializerMethodField()
+    coupon_code = serializers.SerializerMethodField()
+    discounted_price = serializers.SerializerMethodField()
+    discount_value = serializers.SerializerMethodField()
+    discount_type = serializers.SerializerMethodField()
 
     class Meta:
         model = SubscriptionPlan
@@ -35,6 +40,10 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "name",
             "plan_type",
             "monthly_price",
+            "coupon_code",
+            "discounted_price",
+            "discount_value",
+            "discount_type",
             "max_properties",
             "referral_discount_percent",
             "description",
@@ -43,14 +52,50 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "current_plan",
         ]
 
+    def get_discounted_price(self, obj):
+        coupon = self.context.get("coupon")
+
+        if not coupon:
+            return None
+
+        pricing = get_discounted_price(
+            obj.monthly_price,
+            coupon,
+        )
+        return str(pricing["discounted_price"])
+
+    def get_discount_value(self, obj):
+        coupon = self.context.get("coupon")
+
+        if not coupon:
+            return None
+
+        return str(coupon.get("discount_value"))
+
+    def get_discount_type(self, obj):
+        coupon = self.context.get("coupon")
+
+        if not coupon:
+            return None
+
+        return coupon.get("discount_type")
+
+    def get_coupon_code(self, obj):
+        coupon = self.context.get("coupon")
+
+        if not coupon:
+            return None
+
+        return coupon.get("code")
+
     def get_current_plan(self, obj):
         request = self.context.get("request")
-        if request and hasattr(request, "user"):
-            user = request.user
-            organisation = user.get_organisation()
+
+        if request and hasattr(request, "user") and request.user.is_authenticated:
+            organisation = request.user.get_organisation()
+
             if organisation and hasattr(organisation, "subscription"):
-                subscription = organisation.subscription
-                return subscription.plan == obj
+                return organisation.subscription.plan == obj
 
         return False
 
@@ -130,7 +175,10 @@ class OrganisationSubscriptionStatusSerializer(serializers.ModelSerializer):
         ]
 
     def get_trial_days_left(self, obj):
-        if obj.status != OrganisationSubscription.Status.TRIALING or not obj.trial_end_date:
+        if (
+            obj.status != OrganisationSubscription.Status.TRIALING
+            or not obj.trial_end_date
+        ):
             return None
         remaining = obj.trial_end_date - timezone.now()
         if remaining.total_seconds() <= 0:
