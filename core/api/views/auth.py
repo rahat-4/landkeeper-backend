@@ -235,20 +235,13 @@ class GoogleLoginView(SocialLoginView):
 
         user = self.user
 
-        # Referral users must not receive a default Organisation.
-        is_referral = Referral.objects.filter(user=user).exists()
-
-        if not is_referral:
-            self._create_default_organisation(user)
+        self._create_default_organisation(user)
 
         return self.get_response()
 
     def _create_default_organisation(self, user):
         with transaction.atomic():
             locked_user = User.objects.select_for_update().get(pk=user.pk)
-
-            if Referral.objects.filter(user=locked_user).exists():
-                return
 
             if locked_user.get_organisation():
                 return
@@ -308,12 +301,7 @@ class GoogleLoginView(SocialLoginView):
 
     def get_response(self):
         response = super().get_response()
-
-        if Referral.objects.filter(user=self.user).exists():
-            response.data["user"]["user_type"] = None
-        else:
-            response.data["user"]["user_type"] = get_user_type_label(self.user)
-
+        response.data["user"]["user_type"] = get_user_type_label(self.user)
         return response
 
     def _tenant_login_response(self, tenant):
