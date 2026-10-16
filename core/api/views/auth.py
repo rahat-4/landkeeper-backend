@@ -10,7 +10,6 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_decode
 from dj_rest_auth.registration.views import SocialLoginView
 from dj_rest_auth.views import LoginView
-from rest_framework.exceptions import NotFound
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.exceptions import TokenError
@@ -24,7 +23,7 @@ from apps.authentication.models import User, EmailVerification, InviteUser
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 from django.conf import settings
-from rest_framework import serializers, status
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView, ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -34,8 +33,7 @@ from apps.organisation.models import OrganisationUser, Organisation
 from apps.organisation.utils import get_request_organisation
 from apps.property.models import Tenant
 from apps.referral.models import Referral
-from common.permission import IsLandlord, IsSuperAdmin, IsAdmin
-from allauth.socialaccount.providers.oauth2.client import OAuth2Error
+from common.permission import IsLandlord, IsSuperAdmin
 from api.serializers.organisation import OrganisationUserSerializer
 from ..serializers.auth import (
     UserRegistrationSerializer,
@@ -45,6 +43,7 @@ from ..serializers.auth import (
     InviteUserSerializer,
     AcceptInviteSerializer,
     TenantAcceptInviteSerializer,
+    ReferralRegistrationSerializer,
 )
 from django.shortcuts import get_object_or_404
 
@@ -57,6 +56,27 @@ class AccountRegistrationView(CreateAPIView):
 
     def get_queryset(self):
         return User.objects.all()
+
+
+class JoinReferralProgramView(CreateAPIView):
+    serializer_class = ReferralRegistrationSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        referral = user.referral_obj
+
+        return Response(
+            {
+                "message": "Referral account created.",
+                "email": user.email,
+                "coupon_code": referral.coupon_code,
+                "affiliate_id": referral.affiliate_id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class EmailVerifyView(APIView):
