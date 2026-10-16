@@ -66,7 +66,7 @@ class JoinReferralProgramView(CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        referral = user.referral_obj
+        referral = user.referral_profile
 
         return Response(
             {
