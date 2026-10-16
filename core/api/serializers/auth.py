@@ -1,5 +1,6 @@
 import math
-import random
+import logging
+import math
 
 from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
 from django.contrib.auth import get_user_model
@@ -23,6 +24,7 @@ from apps.referral.utils import get_coupon_code
 from api.utils import send_verification_email
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class AffonsoRegistrationError(APIException):
@@ -41,9 +43,6 @@ class AffiliateAlreadyExistsError(APIException):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
-    is_referral = serializers.BooleanField(
-        write_only=True, required=False, default=False
-    )
 
     class Meta:
         model = User
@@ -56,7 +55,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "password",
-            "is_referral",
         ]
 
     def validate_email(self, value):
@@ -66,12 +64,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             or Tenant.objects.filter(email=value).exists()
         ):
             raise serializers.ValidationError("Email is already in use.")
-
         return value
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        is_referral = validated_data.pop("is_referral", False)
 
         with transaction.atomic():
             user = User(**validated_data)
@@ -79,50 +75,71 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             user.is_active = False
             user.save()
 
-            if is_referral:
-                affonso_api = AffonsoAPI()
-
-                try:
-                    affiliate = affonso_api.create_affiliate(user)
-
-                    coupon_code = get_coupon_code(user)
-                    coupon = affonso_api.create_coupon(
-                        affiliate_id=affiliate["id"],
-                        code=coupon_code,
-                    )
-
-                except Exception as exc:
-                    error_message = str(exc)
-
-                    if (
-                        "DUPLICATE_ERROR" in error_message
-                        or "already exists in this program" in error_message
-                    ):
-                        raise AffiliateAlreadyExistsError() from exc
-
-                    raise AffonsoRegistrationError() from exc
-
-                Referral.objects.create(
-                    user=user,
-                    affiliate_id=affiliate["id"],
-                    coupon_code=coupon.get("code", coupon_code),
-                )
-
-            else:
-                organisation = Organisation.objects.create(
-                    name=f"{user.first_name}'s Organisation"
-                )
-
-                OrganisationUser.objects.create(
-                    user=user,
-                    organisation=organisation,
-                )
+            organisation = Organisation.objects.create(
+                name=f"{user.first_name}'s Organisation"
+            )
+            OrganisationUser.objects.create(user=user, organisation=organisation)
 
             code = EmailVerification.make_code()
             EmailVerification.objects.create(user=user, code=code)
             send_verification_email(user, code)
 
             return user
+
+
+class ReferralRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "profile_image",
+            "title",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "email",
+            "phone",
+        ]
+
+    def validate_email(self, value):
+        if (
+            User.objects.filter(email=value).exists()
+            or InviteUser.objects.filter(email=value).exists()
+            or Tenant.objects.filter(email=value).exists()
+        ):
+            raise serializers.ValidationError("Email is already in use.")
+        return value
+
+    def create(self, validated_data):
+        with transaction.atomic():
+            user = User(**validated_data)
+            user.set_unusable_password()
+            user.is_active = False
+            user.save()
+
+            affonso_api = AffonsoAPI()
+            try:
+                affiliate = affonso_api.create_affiliate(user)
+                coupon_code = get_coupon_code(user)
+                coupon = affonso_api.create_coupon(
+                    affiliate_id=affiliate["id"], code=coupon_code
+                )
+            except Exception as exc:
+                error_message = str(exc)
+                if (
+                    "DUPLICATE_ERROR" in error_message
+                    or "already exists in this program" in error_message
+                ):
+                    raise AffiliateAlreadyExistsError() from exc
+                raise AffonsoRegistrationError() from exc
+
+            Referral.objects.create(
+                user=user,
+                affiliate_id=affiliate["id"],
+                coupon_code=coupon.get("code", coupon_code),
+            )
+
+            return user
+
 
 
 class EmailVerifySerializer(serializers.Serializer):
