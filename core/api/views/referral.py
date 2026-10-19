@@ -6,6 +6,7 @@ from rest_framework import status
 
 from apps.referral.models import Referral
 from apps.referral.affonso import AffonsoAPI
+from apps.referral.enums import ReferralStatus
 from apps.referral.utils import get_coupon_code
 
 
@@ -71,4 +72,44 @@ class JoinReferralView(APIView):
         return Response(
             {"detail": "Referral profile created successfully."},
             status=status.HTTP_201_CREATED,
+        )
+
+
+class CouponValidationView(APIView):
+    def post(self, request, *args, **kwargs):
+        coupon_code = request.data.get("coupon_code")
+
+        if not coupon_code:
+            return Response(
+                {"detail": "Coupon code is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            coupon_data = AffonsoAPI().get_coupon_by_code(coupon_code)
+            referral = Referral.objects.filter(coupon_code=coupon_code).first()
+        except Exception as exc:
+            return Response(
+                {
+                    "detail": "Failed to validate the coupon code.",
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if (
+            not coupon_data
+            or not referral
+            or not referral.status == ReferralStatus.ACTIVE
+        ):
+            return Response(
+                {"detail": "Invalid coupon code."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "coupon_code": coupon_data["code"],
+            },
+            status=status.HTTP_200_OK,
         )
