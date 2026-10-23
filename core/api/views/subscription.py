@@ -519,6 +519,37 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
     serializer_class = OrganisationSubscriptionStatusSerializer
     permission_classes = [IsLandlord]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+
+        organisation = get_request_organisation(self.request)
+
+        print("Organisation in context:", organisation)
+
+        coupon_param = self.request.query_params.get("coupon_code")
+
+        if coupon_param:
+            coupon_code = coupon_param.strip().upper()
+        else:
+            coupon_code = organisation.coupon_code if organisation else None
+
+        context["coupon"] = None
+
+        if coupon_code:
+            coupon, error_response = validate_coupon(
+                coupon_code,
+                self.request.user,
+            )
+
+            if error_response:
+                raise serializers.ValidationError(
+                    {"coupon_code": "Invalid or ineligible coupon."}
+                )
+
+            context["coupon"] = coupon
+
+        return context
+
     def get_object(self):
         organisation = self.request.user.get_organisation()
 

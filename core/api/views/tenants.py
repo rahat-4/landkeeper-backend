@@ -808,7 +808,7 @@ class TenantListAPiView(ListAPIView):
 
 
 class TenantPaymentsListAPIView(ListAPIView):
-    permission_classes = [IsLandlord | IsSuperAdmin]
+    permission_classes = [IsLandlord | IsAdmin | IsSuperAdmin]
     serializer_class = LandlordCardPaymentSerializer
     pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend, SearchFilter]
