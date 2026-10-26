@@ -1,17 +1,8 @@
-import uuid
-
-from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.utils import timezone
 
-from apps.organisation.models import Organisation
-from apps.referral.enums import (
-    ReferralStatus,
-    ReferralStatusChoices,
-    CommissionStatusChoices,
-)
+from apps.referral.enums import ReferralStatus
+from apps.property.models import Tenant
 from common.models import CreatedAtUpdatedAtBaseModel
 
 User = get_user_model()
@@ -19,7 +10,18 @@ User = get_user_model()
 
 class Referral(CreatedAtUpdatedAtBaseModel):
     user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="referral_profile"
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="referral_profile",
+    )
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="tenant_referral_profile",
     )
     affiliate_id = models.TextField()
     coupon_code = models.CharField(max_length=16, unique=True)
