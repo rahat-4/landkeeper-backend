@@ -9,7 +9,7 @@ from apps.subscription.models import (
     PaymentCard,
     PaymentTransaction,
 )
-from apps.referral.utils import get_discounted_price
+# from apps.referral.utils import get_discounted_price
 
 
 class SubscriptionFeatureSerializer(serializers.ModelSerializer):
@@ -28,10 +28,12 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     current_plan = serializers.SerializerMethodField()
-    coupon_code = serializers.SerializerMethodField()
-    discounted_price = serializers.SerializerMethodField()
-    discount_value = serializers.SerializerMethodField()
-    discount_type = serializers.SerializerMethodField()
+
+    # Coupon-related fields disabled for now
+    # coupon_code = serializers.SerializerMethodField()
+    # discounted_price = serializers.SerializerMethodField()
+    # discount_value = serializers.SerializerMethodField()
+    # discount_type = serializers.SerializerMethodField()
 
     class Meta:
         model = SubscriptionPlan
@@ -40,10 +42,10 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "name",
             "plan_type",
             "monthly_price",
-            "coupon_code",
-            "discounted_price",
-            "discount_value",
-            "discount_type",
+            # "coupon_code",
+            # "discounted_price",
+            # "discount_value",
+            # "discount_type",
             "max_properties",
             "referral_discount_percent",
             "description",
@@ -52,41 +54,41 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "current_plan",
         ]
 
-    def get_discounted_price(self, obj):
-        coupon = self.context.get("coupon")
+    # def get_discounted_price(self, obj):
+    #     coupon = self.context.get("coupon")
+    #
+    #     if not coupon:
+    #         return None
+    #
+    #     pricing = get_discounted_price(
+    #         obj.monthly_price,
+    #         coupon,
+    #     )
+    #     return str(pricing["discounted_price"])
 
-        if not coupon:
-            return None
+    # def get_discount_value(self, obj):
+    #     coupon = self.context.get("coupon")
+    #
+    #     if not coupon:
+    #         return None
+    #
+    #     return str(coupon.get("discount_value"))
 
-        pricing = get_discounted_price(
-            obj.monthly_price,
-            coupon,
-        )
-        return str(pricing["discounted_price"])
+    # def get_discount_type(self, obj):
+    #     coupon = self.context.get("coupon")
+    #
+    #     if not coupon:
+    #         return None
+    #
+    #     return coupon.get("discount_type")
 
-    def get_discount_value(self, obj):
-        coupon = self.context.get("coupon")
-
-        if not coupon:
-            return None
-
-        return str(coupon.get("discount_value"))
-
-    def get_discount_type(self, obj):
-        coupon = self.context.get("coupon")
-
-        if not coupon:
-            return None
-
-        return coupon.get("discount_type")
-
-    def get_coupon_code(self, obj):
-        coupon = self.context.get("coupon")
-
-        if not coupon:
-            return None
-
-        return coupon.get("code")
+    # def get_coupon_code(self, obj):
+    #     coupon = self.context.get("coupon")
+    #
+    #     if not coupon:
+    #         return None
+    #
+    #     return coupon.get("code")
 
     def get_current_plan(self, obj):
         request = self.context.get("request")

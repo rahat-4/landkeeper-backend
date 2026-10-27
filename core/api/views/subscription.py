@@ -1,6 +1,5 @@
 import logging
 from stripe import InvalidRequestError
-from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -17,7 +16,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
 )
 from rest_framework.views import APIView
-from rest_framework import status, serializers
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -47,7 +46,7 @@ from apps.organisation.utils import get_request_organisation
 from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTransaction
 from apps.organisation.models import OrganisationSubscription
 from apps.property.models import Property
-from apps.referral.utils import validate_coupon
+# from apps.referral.utils import validate_coupon
 from common.permission import IsLandlord
 
 logger = logging.getLogger(__name__)
@@ -105,13 +104,14 @@ class SelectSubscriptionView(APIView):
                 .first()
             )
 
-            coupon = None
-            coupon_code = request.data.get("coupon_code")
-
-            if coupon_code:
-                coupon, error_response = validate_coupon(coupon_code, request.user)
-                if error_response:
-                    return error_response
+            # Coupon functionality disabled for now.
+            # coupon = None
+            # coupon_code = request.data.get("coupon_code")
+            #
+            # if coupon_code:
+            #     coupon, error_response = validate_coupon(coupon_code, request.user)
+            #     if error_response:
+            #         return error_response
 
             if current_subscription:
 
@@ -264,7 +264,7 @@ class SelectSubscriptionView(APIView):
                     user=request.user,
                     plan=plan,
                     payment_method_id=payment_method_id,
-                    affonso_coupon=coupon,
+                    # affonso_coupon=coupon,
                 )
                 return Response(
                     {
@@ -281,11 +281,11 @@ class SelectSubscriptionView(APIView):
                 user=request.user,
                 plan=plan,
                 payment_method_id=payment_method_id,
-                affonso_coupon=coupon,
+                # affonso_coupon=coupon,
             )
-            print("Result from create_subscription_with_client_secret:", coupon)
-            organisation.coupon_code = coupon["code"] if coupon else None
-            organisation.save(update_fields=["coupon_code"])
+            # print("Result from create_subscription_with_client_secret:", coupon)
+            # organisation.coupon_code = coupon["code"] if coupon else None
+            # organisation.save(update_fields=["coupon_code"])
 
             return Response(
                 {
@@ -295,7 +295,6 @@ class SelectSubscriptionView(APIView):
                 },
                 status=status.HTTP_200_OK,
             )
-
 
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(View):
@@ -318,7 +317,6 @@ class StripeWebhookView(View):
         event_type = event["type"]
         data = event["data"]["object"]
 
-        # Keep old handlers for backward compat / direct PI events
         if event_type == "payment_intent.succeeded":
             handle_payment_success(data)
 
@@ -357,27 +355,27 @@ class SubscriptionPlanListView(ListAPIView):
 
         print("Organisation in context:", organisation)
 
-        coupon_param = self.request.query_params.get("coupon_code")
+        # coupon_param = self.request.query_params.get("coupon_code")
 
-        if coupon_param:
-            coupon_code = coupon_param.strip().upper()
-        else:
-            coupon_code = organisation.coupon_code if organisation else None
+        # if coupon_param:
+        #     coupon_code = coupon_param.strip().upper()
+        # else:
+        #     coupon_code = organisation.coupon_code if organisation else None
 
-        context["coupon"] = None
+        # context["coupon"] = None
 
-        if coupon_code:
-            coupon, error_response = validate_coupon(
-                coupon_code,
-                self.request.user,
-            )
+        # if coupon_code:
+        #     coupon, error_response = validate_coupon(
+        #         coupon_code,
+        #         self.request.user,
+        #     )
 
-            if error_response:
-                raise serializers.ValidationError(
-                    {"coupon_code": "Invalid or ineligible coupon."}
-                )
+        #     if error_response:
+        #         raise serializers.ValidationError(
+        #             {"coupon_code": "Invalid or ineligible coupon."}
+        #         )
 
-            context["coupon"] = coupon
+        #     context["coupon"] = coupon
 
         return context
 
@@ -521,33 +519,23 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-
-        organisation = get_request_organisation(self.request)
-
-        print("Organisation in context:", organisation)
-
-        coupon_param = self.request.query_params.get("coupon_code")
-
-        if coupon_param:
-            coupon_code = coupon_param.strip().upper()
-        else:
-            coupon_code = organisation.coupon_code if organisation else None
-
-        context["coupon"] = None
-
-        if coupon_code:
-            coupon, error_response = validate_coupon(
-                coupon_code,
-                self.request.user,
-            )
-
-            if error_response:
-                raise serializers.ValidationError(
-                    {"coupon_code": "Invalid or ineligible coupon."}
-                )
-
-            context["coupon"] = coupon
-
+        # organisation = get_request_organisation(self.request)
+        # coupon_param = self.request.query_params.get("coupon_code")
+        # if coupon_param:
+        #     coupon_code = coupon_param.strip().upper()
+        # else:
+        #     coupon_code = organisation.coupon_code if organisation else None
+        # context["coupon"] = None
+        # if coupon_code:
+        #     coupon, error_response = validate_coupon(
+        #         coupon_code,
+        #         self.request.user,
+        #     )
+        #     if error_response:
+        #         raise serializers.ValidationError(
+        #             {"coupon_code": "Invalid or ineligible coupon."}
+        #         )
+        #     context["coupon"] = coupon
         return context
 
     def get_object(self):

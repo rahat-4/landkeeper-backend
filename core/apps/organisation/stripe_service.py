@@ -1,5 +1,3 @@
-import re
-
 import stripe
 from django.core.mail import send_mail
 from django.conf import settings
@@ -118,51 +116,51 @@ def get_or_create_stripe_price(plan):
 
 
 # STRIPE COUPON
-def get_or_create_stripe_coupon(affonso_coupon):
-    """
-    Create (once) a coupon in our Stripe account matching the discount of
-    an Affonso affiliate coupon, so Stripe charges the discounted price.
-    """
-    discount_type = affonso_coupon.get("discount_type")
-    discount_value = Decimal(str(affonso_coupon.get("discount_value") or 0))
-    duration = affonso_coupon.get("duration") or "forever"
-    duration_in_months = affonso_coupon.get("duration_in_months")
-
-    # Encode the discount in the id so a changed discount gets a new coupon
-    coupon_id = re.sub(
-        r"[^A-Za-z0-9_-]",
-        "",
-        f"affonso-{affonso_coupon['code']}-{discount_type}-{discount_value}"
-        f"-{duration}-{duration_in_months or 0}",
-    )
-
-    try:
-        return stripe.Coupon.retrieve(coupon_id).id
-    except stripe.error.InvalidRequestError:
-        pass
-
-    coupon_params = {
-        "id": coupon_id,
-        "name": f"{affonso_coupon['code']} affiliate discount",
-        "duration": duration,
-        "metadata": {
-            "affonso_coupon_code": affonso_coupon["code"],
-            "affonso_affiliate_id": affonso_coupon.get("affiliate_id") or "",
-        },
-    }
-
-    if discount_type == "percentage":
-        coupon_params["percent_off"] = float(discount_value)
-    else:
-        coupon_params["amount_off"] = int(discount_value * Decimal("100"))
-        coupon_params["currency"] = "gbp"
-
-    if duration == "repeating":
-        coupon_params["duration_in_months"] = duration_in_months
-
-    print("ffffffffffffffffffffffffffffffffff")
-
-    return stripe.Coupon.create(**coupon_params).id
+# def get_or_create_stripe_coupon(affonso_coupon):
+#     """
+#     Create (once) a coupon in our Stripe account matching the discount of
+#     an Affonso affiliate coupon, so Stripe charges the discounted price.
+#     """
+#     discount_type = affonso_coupon.get("discount_type")
+#     discount_value = Decimal(str(affonso_coupon.get("discount_value") or 0))
+#     duration = affonso_coupon.get("duration") or "forever"
+#     duration_in_months = affonso_coupon.get("duration_in_months")
+#
+#     # Encode the discount in the id so a changed discount gets a new coupon
+#     coupon_id = re.sub(
+#         r"[^A-Za-z0-9_-]",
+#         "",
+#         f"affonso-{affonso_coupon['code']}-{discount_type}-{discount_value}"
+#         f"-{duration}-{duration_in_months or 0}",
+#     )
+#
+#     try:
+#         return stripe.Coupon.retrieve(coupon_id).id
+#     except stripe.error.InvalidRequestError:
+#         pass
+#
+#     coupon_params = {
+#         "id": coupon_id,
+#         "name": f"{affonso_coupon['code']} affiliate discount",
+#         "duration": duration,
+#         "metadata": {
+#             "affonso_coupon_code": affonso_coupon["code"],
+#             "affonso_affiliate_id": affonso_coupon.get("affiliate_id") or "",
+#         },
+#     }
+#
+#     if discount_type == "percentage":
+#         coupon_params["percent_off"] = float(discount_value)
+#     else:
+#         coupon_params["amount_off"] = int(discount_value * Decimal("100"))
+#         coupon_params["currency"] = "gbp"
+#
+#     if duration == "repeating":
+#         coupon_params["duration_in_months"] = duration_in_months
+#
+#     print("ffffffffffffffffffffffffffffffffff")
+#
+#     return stripe.Coupon.create(**coupon_params).id
 
 
 # PAYMENT METHOD
@@ -171,7 +169,6 @@ def attach_payment_method(
     payment_method_id,
     set_default=True,
 ):
-
     payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
 
     # Don't attach again if already attached
@@ -201,7 +198,9 @@ def sync_payment_method_to_organisation(
     customer_id = organisation.stripe_customer_id
 
     if not customer_id:
-        raise ValueError("Organisation does not have a Stripe customer.")
+        raise ValueError(
+            "Organisation does not have a Stripe customer."
+        )
 
     payment_method = attach_payment_method(
         customer_id=customer_id,
@@ -212,7 +211,9 @@ def sync_payment_method_to_organisation(
     card = payment_method.card
 
     if not card:
-        raise ValueError("The Stripe PaymentMethod does not contain card information.")
+        raise ValueError(
+            "The Stripe PaymentMethod does not contain card information."
+        )
 
     with transaction.atomic():
 
@@ -306,35 +307,35 @@ def create_subscription_with_client_secret(
     )
 
     # A coupon has to be applied on a fresh subscription, so skip reuse
-    if existing and existing.stripe_subscription_id and not affonso_coupon:
-        try:
-            stripe_subscription = stripe.Subscription.retrieve(
-                existing.stripe_subscription_id,
-                expand=["latest_invoice.confirmation_secret", "pending_setup_intent"],
-            )
-
-            if stripe_subscription.status == "incomplete":
-                confirmation_secret = (
-                    stripe_subscription.latest_invoice.confirmation_secret
-                )
-                if confirmation_secret:
-                    return {
-                        "subscription_id": stripe_subscription.id,
-                        "client_secret": confirmation_secret.client_secret,
-                        "mode": "payment",
-                    }
-
-            elif stripe_subscription.status == "trialing":
-                setup_intent = stripe_subscription.pending_setup_intent
-                if setup_intent and setup_intent.status == "requires_payment_method":
-                    return {
-                        "subscription_id": stripe_subscription.id,
-                        "client_secret": setup_intent.client_secret,
-                        "mode": "setup",
-                    }
-
-        except stripe.error.InvalidRequestError:
-            pass
+    # if existing and existing.stripe_subscription_id and not affonso_coupon:
+    #     try:
+    #         stripe_subscription = stripe.Subscription.retrieve(
+    #             existing.stripe_subscription_id,
+    #             expand=["latest_invoice.confirmation_secret", "pending_setup_intent"],
+    #         )
+    #
+    #         if stripe_subscription.status == "incomplete":
+    #             confirmation_secret = (
+    #                 stripe_subscription.latest_invoice.confirmation_secret
+    #             )
+    #             if confirmation_secret:
+    #                 return {
+    #                     "subscription_id": stripe_subscription.id,
+    #                     "client_secret": confirmation_secret.client_secret,
+    #                     "mode": "payment",
+    #                 }
+    #
+    #         elif stripe_subscription.status == "trialing":
+    #             setup_intent = stripe_subscription.pending_setup_intent
+    #             if setup_intent and setup_intent.status == "requires_payment_method":
+    #                 return {
+    #                     "subscription_id": stripe_subscription.id,
+    #                     "client_secret": setup_intent.client_secret,
+    #                     "mode": "setup",
+    #                 }
+    #
+    #     except stripe.error.InvalidRequestError:
+    #         pass
 
     if current and current.stripe_subscription_id:
         try:
@@ -401,16 +402,16 @@ def create_subscription_with_client_secret(
     if payment_method_id:
         subscription_params["default_payment_method"] = payment_method_id
 
-    if affonso_coupon:
-        subscription_params["discounts"] = [
-            {"coupon": get_or_create_stripe_coupon(affonso_coupon)}
-        ]
-        subscription_params["metadata"].update(
-            {
-                "affonso_coupon_code": affonso_coupon["code"],
-                "affonso_affiliate_id": affonso_coupon.get("affiliate_id") or "",
-            }
-        )
+    # if affonso_coupon:
+    #     subscription_params["discounts"] = [
+    #         {"coupon": get_or_create_stripe_coupon(affonso_coupon)}
+    #     ]
+    #     subscription_params["metadata"].update(
+    #         {
+    #             "affonso_coupon_code": affonso_coupon["code"],
+    #             "affonso_affiliate_id": affonso_coupon.get("affiliate_id") or "",
+    #         }
+    #     )
 
     if idempotency_key:
         stripe_subscription = stripe.Subscription.create(
@@ -1494,7 +1495,4 @@ def cancel_pending_downgrade(organisation):
             "stripe_schedule_id",
         ]
     )
-
-    return {
-        "detail": "Your scheduled plan change has been removed. You're staying on your current plan."
-    }
+    return {"detail": "Your scheduled plan change has been removed. You're staying on your current plan."}

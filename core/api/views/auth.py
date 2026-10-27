@@ -32,7 +32,6 @@ from apps.organisation.enums import OrganisationRoleChoices
 from apps.organisation.models import OrganisationUser, Organisation
 from apps.organisation.utils import get_request_organisation
 from apps.property.models import Tenant
-from apps.referral.models import Referral
 from common.permission import IsLandlord, IsSuperAdmin
 from api.serializers.organisation import OrganisationUserSerializer
 from ..serializers.auth import (
@@ -43,7 +42,7 @@ from ..serializers.auth import (
     InviteUserSerializer,
     AcceptInviteSerializer,
     TenantAcceptInviteSerializer,
-    ReferralRegistrationSerializer,
+    # ReferralRegistrationSerializer,
 )
 from django.shortcuts import get_object_or_404
 
@@ -57,26 +56,26 @@ class AccountRegistrationView(CreateAPIView):
     def get_queryset(self):
         return User.objects.all()
 
-
-class JoinReferralProgramView(CreateAPIView):
-    serializer_class = ReferralRegistrationSerializer
-    permission_classes = [AllowAny]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        referral = user.referral_profile
-
-        return Response(
-            {
-                "message": "Referral account created.",
-                "email": user.email,
-                "coupon_code": referral.coupon_code,
-                "affiliate_id": referral.affiliate_id,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+#
+# class JoinReferralProgramView(CreateAPIView):
+#     serializer_class = ReferralRegistrationSerializer
+#     permission_classes = [AllowAny]
+#
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         user = serializer.save()
+#         referral = user.referral_profile
+#
+#         return Response(
+#             {
+#                 "message": "Referral account created.",
+#                 "email": user.email,
+#                 "coupon_code": referral.coupon_code,
+#                 "affiliate_id": referral.affiliate_id,
+#             },
+#             status=status.HTTP_201_CREATED,
+#         )
 
 
 class EmailVerifyView(APIView):

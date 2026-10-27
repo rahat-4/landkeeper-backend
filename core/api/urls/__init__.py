@@ -15,5 +15,5 @@ urlpatterns = [
     path("/dashboard", include("api.urls.dashboard")),
     path("/admin", include("api.urls.admin")),
     path("/marketplace", include("api.urls.marketplace")),
-    path("/referral", include("api.urls.referral")),
+    # path("/referral", include("api.urls.referral")),
 ]
