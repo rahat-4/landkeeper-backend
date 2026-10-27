@@ -1,14 +1,13 @@
 import io
 from datetime import date
-
+from django.utils import timezone
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.exceptions import NotFound
 from rest_framework.generics import (
     ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView, ListAPIView,
+    RetrieveUpdateDestroyAPIView,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import ValidationError
@@ -595,6 +594,16 @@ class PropertyPortfolioExportView(APIView):
                 if col == 2:
                     cell.number_format = "£#,##0.00"
 
+        generated_row = income_row + 2
+        ws.cell(row=generated_row, column=1, value="Report generated on").font = Font(bold=True)
+        gen_cell = ws.cell(
+            row=generated_row,
+            column=2,
+            value=timezone.localtime().strftime("%d-%m-%Y %H:%M"),
+        )
+        gen_cell.font = Font(bold=True)
+        gen_cell.alignment = Alignment(horizontal="left")
+
         ws.freeze_panes = "A2"
         ws.sheet_view.showGridLines = False
 
@@ -611,6 +620,8 @@ class PropertyPortfolioExportView(APIView):
         ACCENT = colors.HexColor("#8A6D3B")
         WHITE = colors.white
         ZEBRA = colors.HexColor("#F9FAFB")
+
+        generated_on = timezone.localtime().strftime("%d-%m-%Y %H:%M")
 
         page_size = landscape(A4)
         page_w, _ = page_size
@@ -836,6 +847,8 @@ class PropertyPortfolioExportView(APIView):
             Paragraph("Property Portfolio Summary", title_style),
             Spacer(1, 3),
             Paragraph("Landkeeper — Landlord Property Management", subtitle_style),
+            Spacer(1, 2),
+            Paragraph(f"Report generated on {generated_on}", subtitle_style),
             Spacer(1, 14),
             table,
             Spacer(1, 16),
