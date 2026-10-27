@@ -1,14 +1,10 @@
-import math
 import logging
 import math
-
 from dj_rest_auth.serializers import LoginSerializer, JWTSerializer
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.exceptions import APIException
-from rest_framework import status
 from apps.authentication.models import EmailVerification, InviteUser
 from apps.authentication.enums import NameTitleChoices
 from apps.organisation.models import (
@@ -17,9 +13,9 @@ from apps.organisation.models import (
     OrganisationSubscription,
 )
 from apps.property.models import Tenant
-from apps.referral.models import Referral
-from apps.referral.affonso import AffonsoAPI
-from apps.referral.utils import get_coupon_code
+# from apps.referral.models import Referral
+# from apps.referral.affonso import AffonsoAPI
+# from apps.referral.utils import get_coupon_code
 
 from api.utils import send_verification_email
 
@@ -27,18 +23,18 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
-class AffonsoRegistrationError(APIException):
-    status_code = status.HTTP_502_BAD_GATEWAY
-    default_detail = "Failed to create the referral account."
-    default_code = "affonso_error"
-
-
-class AffiliateAlreadyExistsError(APIException):
-    status_code = status.HTTP_409_CONFLICT
-    default_detail = (
-        "An affiliate with this email already exists in the referral program."
-    )
-    default_code = "affiliate_already_exists"
+# class AffonsoRegistrationError(APIException):
+#     status_code = status.HTTP_502_BAD_GATEWAY
+#     default_detail = "Failed to create the referral account."
+#     default_code = "affonso_error"
+#
+#
+# class AffiliateAlreadyExistsError(APIException):
+#     status_code = status.HTTP_409_CONFLICT
+#     default_detail = (
+#         "An affiliate with this email already exists in the referral program."
+#     )
+#     default_code = "affiliate_already_exists"
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -87,58 +83,58 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             return user
 
 
-class ReferralRegistrationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            "profile_image",
-            "title",
-            "first_name",
-            "middle_name",
-            "last_name",
-            "email",
-            "phone",
-        ]
-
-    def validate_email(self, value):
-        if (
-            User.objects.filter(email=value).exists()
-            or InviteUser.objects.filter(email=value).exists()
-            or Tenant.objects.filter(email=value).exists()
-        ):
-            raise serializers.ValidationError("Email is already in use.")
-        return value
-
-    def create(self, validated_data):
-        with transaction.atomic():
-            user = User(**validated_data)
-            user.set_unusable_password()
-            user.is_active = False
-            user.save()
-
-            affonso_api = AffonsoAPI()
-            try:
-                affiliate = affonso_api.create_affiliate(user)
-                coupon_code = get_coupon_code(user)
-                coupon = affonso_api.create_coupon(
-                    affiliate_id=affiliate["id"], code=coupon_code
-                )
-            except Exception as exc:
-                error_message = str(exc)
-                if (
-                    "DUPLICATE_ERROR" in error_message
-                    or "already exists in this program" in error_message
-                ):
-                    raise AffiliateAlreadyExistsError() from exc
-                raise AffonsoRegistrationError() from exc
-
-            Referral.objects.create(
-                user=user,
-                affiliate_id=affiliate["id"],
-                coupon_code=coupon.get("code", coupon_code),
-            )
-
-            return user
+# class ReferralRegistrationSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = [
+#             "profile_image",
+#             "title",
+#             "first_name",
+#             "middle_name",
+#             "last_name",
+#             "email",
+#             "phone",
+#         ]
+#
+#     def validate_email(self, value):
+#         if (
+#             User.objects.filter(email=value).exists()
+#             or InviteUser.objects.filter(email=value).exists()
+#             or Tenant.objects.filter(email=value).exists()
+#         ):
+#             raise serializers.ValidationError("Email is already in use.")
+#         return value
+#
+#     def create(self, validated_data):
+#         with transaction.atomic():
+#             user = User(**validated_data)
+#             user.set_unusable_password()
+#             user.is_active = False
+#             user.save()
+#
+#             affonso_api = AffonsoAPI()
+#             try:
+#                 affiliate = affonso_api.create_affiliate(user)
+#                 coupon_code = get_coupon_code(user)
+#                 coupon = affonso_api.create_coupon(
+#                     affiliate_id=affiliate["id"], code=coupon_code
+#                 )
+#             except Exception as exc:
+#                 error_message = str(exc)
+#                 if (
+#                     "DUPLICATE_ERROR" in error_message
+#                     or "already exists in this program" in error_message
+#                 ):
+#                     raise AffiliateAlreadyExistsError() from exc
+#                 raise AffonsoRegistrationError() from exc
+#
+#             Referral.objects.create(
+#                 user=user,
+#                 affiliate_id=affiliate["id"],
+#                 coupon_code=coupon.get("code", coupon_code),
+#             )
+#
+#             return user
 
 
 
@@ -246,7 +242,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     subscription_status = serializers.SerializerMethodField()
     plan = serializers.SerializerMethodField()
     trial_days_left = serializers.SerializerMethodField()
-    is_referral = serializers.SerializerMethodField()
+    # is_referral = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -268,7 +264,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "subscription_status",
             "plan",
             "trial_days_left",
-            "is_referral",
+            # "is_referral",
             "created_at",
             "updated_at",
         ]
@@ -335,14 +331,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return 0
         return math.ceil(remaining.total_seconds() / 86400)
 
-    def get_is_referral(self, obj):
-        return Referral.objects.filter(user=obj).exists()
+    # def get_is_referral(self, obj):
+    #     return Referral.objects.filter(user=obj).exists()
 
 
 class TenantProfileSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     is_password_available = serializers.SerializerMethodField()
-    is_referral = serializers.SerializerMethodField()
+    # is_referral = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
@@ -357,7 +353,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             "avatar",
             "rent_amount",
             "is_active",
-            "is_referral",
+            # "is_referral",
             "is_password_available",
             "created_at",
             "updated_at",
@@ -377,8 +373,8 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     def get_is_password_available(self, obj):
         return obj.has_usable_password()
 
-    def get_is_referral(self, obj):
-        return Referral.objects.filter(tenant=obj).exists()
+    # def get_is_referral(self, obj):
+    #     return Referral.objects.filter(tenant=obj).exists()
 
 
 class CustomJWTSerializer(JWTSerializer):

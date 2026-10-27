@@ -18,7 +18,7 @@ class OrganisationRoleChoices(models.TextChoices):
 class SourceChoices(models.TextChoices):
     GOOGLE = "GOOGLE", _("Google")
     SOCIAL_MEDIA = "SOCIAL_MEDIA", _("Social Media")
-    REFERRAL = "REFERRAL", _("Referral")
+    # REFERRAL = "REFERRAL", _("Referral")
     WEBSITE = "WEBSITE", _("Website")
     OTHER = "OTHER", _("Other")
 

@@ -42,17 +42,16 @@ class SubscriptionPlan(CreatedAtUpdatedAtBaseModel):
         null=True,
     )
     max_properties = models.PositiveIntegerField()
-    referral_discount_percent = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=20.00,
-    )
+    # referral_discount_percent = models.DecimalField(
+    #     max_digits=5,
+    #     decimal_places=2,
+    #     default=20.00,
+    # )
     is_active = models.BooleanField(default=True)
     description = models.TextField(
         blank=True,
         null=True,
     )
-
     features = models.ManyToManyField(
         SubscriptionFeature,
         related_name="plans",
