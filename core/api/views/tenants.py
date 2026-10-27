@@ -41,7 +41,7 @@ from api.serializers.tenants import (
     MaintenanceRequestCommentSerializer,
     LandlordCardPaymentSerializer,
     PaymentHistorySerializer,
-    PropertListSerializer,
+    PropertySerializer,
 )
 from apps.organisation.stripe_connect import (
     sync_account_status_from_stripe,
@@ -830,12 +830,10 @@ class TenantPaymentsListAPIView(ListAPIView):
         )
 
 
-class PropertyListApiViews(ListAPIView):
+class PropertyApiViews(ListAPIView):
     permission_classes = [IsTenant]
-    serializer_class = PropertListSerializer
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    filterset_fields = ["property_type", "status"]
-    search_fields = ["property_name", "address"]
+    serializer_class = PropertySerializer
+    pagination_class = None
 
     def get_queryset(self):
         tenant = self.request.user

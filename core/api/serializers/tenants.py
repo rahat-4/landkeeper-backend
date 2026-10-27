@@ -405,7 +405,7 @@ class LandlordCardPaymentSerializer(serializers.ModelSerializer):
         return obj.payment_method.card_brand if obj.payment_method else None
 
 
-class PropertListSerializer(serializers.ModelSerializer):
+class PropertySerializer(serializers.ModelSerializer):
     landlord = serializers.SerializerMethodField()
     documents = MediaSerializer(many=True, read_only=True)
 
