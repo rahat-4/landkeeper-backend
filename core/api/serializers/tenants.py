@@ -7,9 +7,10 @@ from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
 
+from api.serializers.property import MediaSerializer
 from apps.organisation.enums import OrganisationRoleChoices
 from apps.organisation.models import OrganisationUser
-from apps.property.models import Tenant
+from apps.property.models import Tenant, Property
 from apps.tenant.enums import (
     RentPaymentStatusChoices,
 )
@@ -402,3 +403,42 @@ class LandlordCardPaymentSerializer(serializers.ModelSerializer):
 
     def get_card_brand(self, obj):
         return obj.payment_method.card_brand if obj.payment_method else None
+
+
+class PropertySerializer(serializers.ModelSerializer):
+    landlord = serializers.SerializerMethodField()
+    documents = MediaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Property
+        fields = [
+            "alias",
+            "property_name",
+            "property_owner",
+            "company_name",
+            "property_type",
+            "status",
+            "address",
+            "year_built",
+            "property_tenure",
+            "bedrooms",
+            "bathrooms",
+            "notes",
+            "documents",
+            "landlord",
+        ]
+        read_only_fields = [
+            "alias",
+            "landlord",
+        ]
+
+    def get_landlord(self, obj):
+        org = obj.organisation
+        if not org:
+            return None
+        return {
+            "name": org.name,
+            "contact_person": org.contact_person,
+            "mobile": org.primary_mobile,
+            "address": org.address,
+        }

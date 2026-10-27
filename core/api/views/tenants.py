@@ -3,7 +3,6 @@ from django.conf import settings
 import uuid
 from io import BytesIO
 import stripe
-from django.db.models import Exists, OuterRef
 from datetime import date, timedelta
 from django.db import transaction
 from django.db.models import Value, CharField
@@ -42,6 +41,7 @@ from api.serializers.tenants import (
     MaintenanceRequestCommentSerializer,
     LandlordCardPaymentSerializer,
     PaymentHistorySerializer,
+    PropertySerializer,
 )
 from apps.organisation.stripe_connect import (
     sync_account_status_from_stripe,
@@ -826,5 +826,26 @@ class TenantPaymentsListAPIView(ListAPIView):
         return (
             CardPayment.objects.filter(organisation=organisation)
             .select_related("tenant", "tenant__property", "payment_method")
+            .order_by("-created_at")
+        )
+
+
+class PropertyApiViews(ListAPIView):
+    permission_classes = [IsTenant]
+    serializer_class = PropertySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        tenant = self.request.user
+
+        if not getattr(tenant, "property_id", None):
+            return Property.objects.none()
+
+        return (
+            Property.objects.filter(
+                id=tenant.property_id,
+                organisation_id=tenant.organisation_id,
+            )
+            .select_related("organisation")
             .order_by("-created_at")
         )

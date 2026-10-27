@@ -14,6 +14,7 @@ from api.views.tenants import (
     CardPaymentView,
     TenantStripeConnectWebhookView,
     TenantPaymentsListAPIView,
+    PropertyApiViews,
 )
 
 urlpatterns = [
@@ -81,5 +82,10 @@ urlpatterns = [
         "/payments",
         TenantPaymentsListAPIView.as_view(),
         name="tenant-payments-list"
+    ),
+    path(
+        "/property",
+        PropertyApiViews.as_view(),
+        name="property-list"
     ),
 ]
