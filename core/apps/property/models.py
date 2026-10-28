@@ -312,6 +312,7 @@ class Finance(CreatedAtUpdatedAtBaseModel):
     amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
+    other_category = models.CharField(max_length=100, blank=True, null=True)
     receipt = models.ManyToManyField(
         DocumentFile, blank=True, related_name="finance_documents"
     )

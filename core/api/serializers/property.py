@@ -597,6 +597,7 @@ class FinanceSerializer(serializers.ModelSerializer):
             "property",
             "type",
             "category",
+            "other_category",
             "amount",
             "date",
             "description",
