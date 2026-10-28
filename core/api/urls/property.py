@@ -14,7 +14,6 @@ from api.views.property import (
     FinanceDetailView,
     FinanceListView,
     PropertyOnboardingAPIView,
-    PropertyPortfolioExportView,
     ComplianceAndCertificationShareView,
 )
 
@@ -73,10 +72,5 @@ urlpatterns = [
         "/properties/onboarding",
         PropertyOnboardingAPIView.as_view(),
         name="property-onboarding",
-    ),
-    path(
-        "/properties-portfolio",
-        PropertyPortfolioExportView.as_view(),
-        name="properties-portfolio",
     ),
 ]
