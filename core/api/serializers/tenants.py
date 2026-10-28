@@ -440,9 +440,11 @@ class PropertySerializer(serializers.ModelSerializer):
         landlord = org.organisation_users.filter(
             role=OrganisationRoleChoices.LANDLORD
         ).first()
+        if not landlord:
+            return None
 
         return {
-            "name": landlord.user.get_full_name() if landlord else org.name,
+            "name": landlord.user.get_full_name(),
             "contact_person": org.contact_person,
             "mobile": org.primary_mobile,
             "address": org.address,
