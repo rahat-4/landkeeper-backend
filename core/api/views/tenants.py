@@ -22,12 +22,13 @@ from reportlab.platypus import (
     Spacer,
 )
 from rest_framework import status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.filters import SearchFilter
 from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView,
     ListAPIView,
+    ListCreateAPIView,
+    RetrieveAPIView,
+    RetrieveUpdateDestroyAPIView,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -830,22 +831,20 @@ class TenantPaymentsListAPIView(ListAPIView):
         )
 
 
-class PropertyApiViews(ListAPIView):
+class PropertyApiViews(RetrieveAPIView):
     permission_classes = [IsTenant]
     serializer_class = PropertySerializer
-    pagination_class = None
 
-    def get_queryset(self):
+    def get_object(self):
         tenant = self.request.user
 
         if not getattr(tenant, "property_id", None):
-            return Property.objects.none()
+            raise NotFound("No property assigned to this tenant.")
 
-        return (
-            Property.objects.filter(
+        try:
+            return Property.objects.select_related("organisation").get(
                 id=tenant.property_id,
                 organisation_id=tenant.organisation_id,
             )
-            .select_related("organisation")
-            .order_by("-created_at")
-        )
+        except Property.DoesNotExist:
+            raise NotFound("Property not found.")

@@ -33,7 +33,7 @@ class MarketplaceProvider(CreatedAtUpdatedAtBaseModel):
     description = models.TextField(blank=True, null=True)
     services_offered = models.JSONField(default=list, blank=True)
     website_url = models.URLField(max_length=500, blank=True, null=True)
-    # referral_url = models.URLField(max_length=500, blank=True, null=True)
+    referral_url = models.URLField(max_length=500, blank=True, null=True)
     contact_email = models.EmailField(blank=True, null=True)
     contact_phone = models.CharField(max_length=32, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)

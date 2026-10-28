@@ -16,4 +16,5 @@ urlpatterns = [
     path("/admin", include("api.urls.admin")),
     path("/marketplace", include("api.urls.marketplace")),
     # path("/referral", include("api.urls.referral")),
+    path("/mtd", include("api.urls.mtd")),
 ]
