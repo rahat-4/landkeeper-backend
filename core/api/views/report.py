@@ -2,8 +2,8 @@ import io
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
-from django.db.models import Count, DecimalField, Q, Sum, Value
-from django.db.models.functions import Coalesce, TruncMonth
+from django.db.models import DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -32,7 +32,7 @@ from common.permission import (
 
 
 class PropertyPortfolioExportView(APIView):
-    permission_classes = [IsLandlord | IsAdmin | IsMortgageAdviser | IsSuperAdmin ]
+    permission_classes = [IsLandlord | IsAdmin | IsMortgageAdviser | IsSuperAdmin]
 
     HEADERS = [
         "Property Address",
@@ -286,7 +286,9 @@ class PropertyPortfolioExportView(APIView):
                     cell.number_format = "£#,##0.00"
 
         generated_row = income_row + 2
-        ws.cell(row=generated_row, column=1, value="Report generated on").font = Font(bold=True)
+        ws.cell(row=generated_row, column=1, value="Report generated on").font = Font(
+            bold=True
+        )
         gen_cell = ws.cell(
             row=generated_row,
             column=2,
@@ -604,9 +606,8 @@ class IncomeReportView(APIView):
             category__in=self.REPORT_CATEGORIES,
         ).select_related("property", "organisation")
 
-        if (
-            IsAdmin().has_permission(request, self)
-            or IsSuperAdmin().has_permission(request, self)
+        if IsAdmin().has_permission(request, self) or IsSuperAdmin().has_permission(
+            request, self
         ):
             return qs
 
@@ -800,9 +801,8 @@ class ExpenseReportView(APIView):
             category__in=self.REPORT_CATEGORIES,
         ).select_related("property", "organisation")
 
-        if (
-            IsAdmin().has_permission(request, self)
-            or IsSuperAdmin().has_permission(request, self)
+        if IsAdmin().has_permission(request, self) or IsSuperAdmin().has_permission(
+            request, self
         ):
             return qs
 
