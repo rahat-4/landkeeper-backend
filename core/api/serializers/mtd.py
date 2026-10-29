@@ -32,12 +32,6 @@ class MTDReportSerializer(serializers.ModelSerializer):
             "tax_year",
             "quarter",
             "properties",
-            "confirmed_all_properties_included",
-            "confirmed_entries_checked",
-            "confirmed_items_flagged",
-            "confirmed_by_name",
-            "confirmed_at",
-            "review_notes",
         ]
         read_only_fields = fields
 

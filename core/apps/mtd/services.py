@@ -11,7 +11,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.property.enums import Category, TransactionType
-from apps.property.models import Finance
+from apps.property.models import Finance, Property, Mortgage
 
 ZERO = Decimal("0.00")
 
@@ -28,14 +28,13 @@ EXPENSE_CATEGORIES = [
 ]
 
 
-def get_report_finance(report, start=None, end=None, included_only=True):
+def get_report_finance(report):
     """Finance entries for the report's properties dated within the period."""
     queryset = Finance.objects.filter(
         organisation_id=report.organisation_id,
-        date__range=(report.period_start, report.period_end),
+        property__in=report.properties.all(),
     )
-    if included_only:
-        queryset = queryset.filter(property__in=report.properties.all())
+
     return queryset
 
 
@@ -57,18 +56,33 @@ def get_expense_entries(report):
     )
 
 
+def get_mortgage_interest(report):
+    return Mortgage.objects.filter(
+        organisation_id=report.organisation_id,
+        property__in=report.properties.all(),
+    ).select_related("property")
+
+
 def calculate_report_summary(report):
     """Totals for the ticked properties, matching the Income & Expenses tab."""
-    total_rental_income = (
+    total_income = (
         get_income_entries(report).aggregate(total=Sum("amount"))["total"] or ZERO
     )
-    total_allowable_property_expenses = (
+    total_allowable_expenses = (
         get_expense_entries(report).aggregate(total=Sum("amount"))["total"] or ZERO
     )
+    total_mortgage_interest = (
+        get_mortgage_interest(report).aggregate(total=Sum("monthly_payment"))["total"]
+        or ZERO
+    )
+    total_properties = Property.objects.filter(organisation=report.organisation).count()
+
     return {
-        "total_rental_income": total_rental_income,
-        "total_allowable_property_expenses": total_allowable_property_expenses,
-        "net_property_profit": total_rental_income - total_allowable_property_expenses,
+        "total_income": total_income,
+        "total_allowable_expenses": total_allowable_expenses,
+        "property_profit": total_income - total_allowable_expenses,
+        "total_mortgage_interest": total_mortgage_interest,
+        "total_properties": total_properties,
         "number_of_properties_included": report.properties.count(),
     }
 
@@ -141,20 +155,18 @@ def build_summary_pdf(report, summary):
 
     summary_rows = [
         ["Category", "Amount (£)"],
-        ["Total rental income", fmt_money(summary["total_rental_income"])],
+        ["Total income", fmt_money(summary["total_income"])],
         [
-            "Total allowable property expenses",
-            fmt_money(summary["total_allowable_property_expenses"]),
+            "Total allowable expenses",
+            fmt_money(summary["total_allowable_expenses"]),
         ],
-        ["NET PROPERTY PROFIT / (LOSS)", fmt_money(summary["net_property_profit"])],
+        ["PROPERTY PROFIT / (LOSS)", fmt_money(summary["property_profit"])],
         [
             "Number of properties included",
             str(summary["number_of_properties_included"]),
         ],
     ]
-    story.append(
-        styled_table(summary_rows, [120 * mm, 50 * mm], highlight_rows=(3,))
-    )
+    story.append(styled_table(summary_rows, [120 * mm, 50 * mm], highlight_rows=(3,)))
 
     story += [Spacer(1, 6 * mm), Paragraph("Declaration", heading_style)]
     declarations = [
