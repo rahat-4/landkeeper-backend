@@ -38,6 +38,24 @@ def get_report_finance(report):
     return queryset
 
 
+def get_rental_income(report):
+    return (
+        get_report_finance(report)
+        .filter(type=TransactionType.INCOME, category=Category.RENTAL_INCOME)
+        .select_related("property")
+        .order_by("date", "id")
+    )
+
+
+def get_other_income(report):
+    return (
+        get_report_finance(report)
+        .filter(type=TransactionType.INCOME, category=Category.OTHER)
+        .select_related("property")
+        .order_by("date", "id")
+    )
+
+
 def get_income_entries(report):
     return (
         get_report_finance(report)
@@ -65,6 +83,12 @@ def get_mortgage_interest(report):
 
 def calculate_report_summary(report):
     """Totals for the ticked properties, matching the Income & Expenses tab."""
+    total_rental_income = (
+        get_rental_income(report).aggregate(total=Sum("amount"))["total"] or ZERO
+    )
+    total_other_income = (
+        get_other_income(report).aggregate(total=Sum("amount"))["total"] or ZERO
+    )
     total_income = (
         get_income_entries(report).aggregate(total=Sum("amount"))["total"] or ZERO
     )
@@ -78,6 +102,8 @@ def calculate_report_summary(report):
     total_properties = Property.objects.filter(organisation=report.organisation).count()
 
     return {
+        "total_rental_income": total_rental_income,
+        "total_other_income": total_other_income,
         "total_income": total_income,
         "total_allowable_expenses": total_allowable_expenses,
         "property_profit": total_income - total_allowable_expenses,
