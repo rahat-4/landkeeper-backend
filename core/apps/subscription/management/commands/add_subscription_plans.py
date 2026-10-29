@@ -87,7 +87,7 @@ PLANS = [
         "name": "Basic",
         "monthly_price": "12.99",
         "max_properties": 3,
-        "referral_discount_percent": "20.00",
+        # "referral_discount_percent": "20.00",
         "feature_codes": [
             "property_management",
             "dashboard",
@@ -106,7 +106,7 @@ PLANS = [
         "name": "Standard",
         "monthly_price": "29.99",
         "max_properties": 15,
-        "referral_discount_percent": "20.00",
+        # "referral_discount_percent": "20.00",
         "feature_codes": [
             # Basic features
             "property_management",
@@ -129,7 +129,7 @@ PLANS = [
         "name": "Premium",
         "monthly_price": "59.99",
         "max_properties": 100,
-        "referral_discount_percent": "20.00",
+        # "referral_discount_percent": "20.00",
         "feature_codes": [
             # Basic features
             "property_management",
@@ -201,7 +201,7 @@ class Command(BaseCommand):
                     "name": plan_data["name"],
                     "monthly_price": plan_data["monthly_price"],
                     "max_properties": plan_data["max_properties"],
-                    "referral_discount_percent": plan_data["referral_discount_percent"],
+                    # "referral_discount_percent": plan_data["referral_discount_percent"],
                     "is_active": True,
                 },
             )

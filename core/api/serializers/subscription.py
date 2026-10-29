@@ -9,6 +9,7 @@ from apps.subscription.models import (
     PaymentCard,
     PaymentTransaction,
 )
+
 # from apps.referral.utils import get_discounted_price
 
 
@@ -47,7 +48,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             # "discount_value",
             # "discount_type",
             "max_properties",
-            "referral_discount_percent",
+            # "referral_discount_percent",
             "description",
             "features",
             "is_active",
