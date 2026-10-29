@@ -86,6 +86,20 @@ class Property(CreatedAtUpdatedAtBaseModel):
         )
 
 
+class PropertyRoom(CreatedAtUpdatedAtBaseModel):
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name="rooms"
+    )
+    room_name = models.CharField(max_length=255)
+    monthly_rental_income = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.property.property_name} - {self.room_name}"
+
+
 class PropertyOwnership(CreatedAtUpdatedAtBaseModel):
     property = models.ForeignKey(
         Property,
@@ -189,6 +203,13 @@ class Tenant(AbstractBaseUser, CreatedAtUpdatedAtBaseModel):
     )
     organisation = models.ForeignKey(
         Organisation, on_delete=models.CASCADE, related_name="organisation_tenants"
+    )
+    room = models.ForeignKey(
+        "PropertyRoom",
+        on_delete=models.SET_NULL,
+        related_name="room_tenants",
+        blank=True,
+        null=True,
     )
 
     USERNAME_FIELD = "email"
