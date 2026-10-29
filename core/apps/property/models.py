@@ -309,6 +309,7 @@ class Finance(CreatedAtUpdatedAtBaseModel):
     category = models.CharField(
         max_length=20, choices=Category.choices, null=True, blank=True
     )
+    other_category = models.CharField(max_length=100, blank=True, null=True)
     amount = models.DecimalField(max_digits=20, decimal_places=2, blank=True, null=True)
     date = models.DateField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
