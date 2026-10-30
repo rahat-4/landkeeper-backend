@@ -1,6 +1,4 @@
 import os
-from typing import Any
-
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
@@ -10,7 +8,7 @@ from rest_framework import serializers
 from apps.authentication.models import InviteUser
 from apps.organisation.enums import OrganisationRoleChoices
 from apps.organisation.utils import get_request_organisation
-from apps.property.enums import PropertyOwnerType, CertificateType
+from apps.property.enums import PropertyOwnerType, CertificateType, PropertyType
 from apps.property.models import (
     Property,
     Mortgage,
@@ -19,12 +17,11 @@ from apps.property.models import (
     UploadDocument,
     Finance,
     PropertyOwnership,
+    PropertyRoom,
 )
 from common.models import Media, DocumentFile
 from common.serializers import (
     PropertySlimSerializer,
-    TenantSlimSerializer,
-    UserSlimSerializer,
 )
 from django.db import transaction
 
@@ -78,12 +75,24 @@ class PropertyOwnershipSerializer(serializers.ModelSerializer):
         return rep
 
 
+class PropertyRoomSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PropertyRoom
+        fields = [
+            "alias",
+            "room_name",
+            "monthly_rent"
+        ]
+        read_only_fields = ["alias"]
+
+
 class PropertySerializer(serializers.ModelSerializer):
     documents_data = serializers.ListField(
         child=serializers.ImageField(), required=False, write_only=True
     )
     documents = MediaSerializer(many=True, read_only=True)
     shareholder = PropertyOwnershipSerializer(many=True, required=False)
+    rooms = PropertyRoomSerializer(many=True, required=False)
     landlord = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
 
@@ -98,6 +107,7 @@ class PropertySerializer(serializers.ModelSerializer):
             "property_owner",
             "company_name",
             "property_type",
+            "rooms",
             "status",
             "address",
             "purchase_price",
@@ -165,8 +175,8 @@ class PropertySerializer(serializers.ModelSerializer):
             return False
 
         if user.organisation_users.filter(
-            organisation=organisation,
-            role__in=[OrganisationRoleChoices.LANDLORD, OrganisationRoleChoices.ADMIN],
+                organisation=organisation,
+                role__in=[OrganisationRoleChoices.LANDLORD, OrganisationRoleChoices.ADMIN],
         ).exists():
             return True
 
@@ -200,6 +210,34 @@ class PropertySerializer(serializers.ModelSerializer):
                     owner["share_percentage"] = None
                     owner["shareholder_name"] = None
 
+        # HMO Rooms: only HMO properties can have rooms
+        property_type = attrs.get(
+            "property_type",
+            getattr(self.instance, "property_type", None),
+        )
+
+        if property_type == PropertyType.HMO:
+            bedrooms = attrs.get("bedrooms", getattr(self.instance, "bedrooms", None))
+            rooms = attrs.get("rooms")
+
+            if not bedrooms:
+                raise serializers.ValidationError(
+                    {"bedrooms": ["bedrooms is required when property is HMO."]}
+                )
+
+            if rooms is None and self.instance is None:
+                raise serializers.ValidationError(
+                    {"rooms": [f"Add {bedrooms} rooms with monthly rent income."]}
+                )
+
+            if rooms is not None and len(rooms) != bedrooms:
+                raise serializers.ValidationError(
+                    {"rooms": [
+                        f"bedrooms is {bedrooms}, so you must add exactly {bedrooms} rooms (you sent {len(rooms)})."]}
+                )
+        else:
+            attrs["rooms"] = []
+
         return attrs
 
     MULTI_VALUE_FIELDS = {"documents_data"}
@@ -224,9 +262,9 @@ class PropertySerializer(serializers.ModelSerializer):
             share_percentage_key = f"shareholder[{index}].share_percentage"
 
             if (
-                owner_name_key not in plain_data
-                and shareholder_name_key not in plain_data
-                and share_percentage_key not in plain_data
+                    owner_name_key not in plain_data
+                    and shareholder_name_key not in plain_data
+                    and share_percentage_key not in plain_data
             ):
                 break
 
@@ -245,12 +283,32 @@ class PropertySerializer(serializers.ModelSerializer):
         elif "shareholder" not in plain_data and self.instance is None:
             plain_data["shareholder"] = []
 
+        rooms = []
+        index = 0
+        while True:
+            room_name_key = f"rooms[{index}].room_name"
+            income_key = f"rooms[{index}].monthly_rent"
+
+            if room_name_key not in plain_data and income_key not in plain_data:
+                break
+
+            rooms.append(
+                {
+                    "room_name": plain_data.pop(room_name_key, None),
+                    "monthly_rent": plain_data.pop(income_key, None),
+                }
+            )
+            index += 1
+
+        if rooms:
+            plain_data["rooms"] = rooms
+
         return super().to_internal_value(plain_data)
 
     def create(self, validated_data):
         documents_data = validated_data.pop("documents_data", [])
-        print("PropertySerializer.create documents_data:", documents_data)
         shareholder = validated_data.pop("shareholder", [])
+        rooms = validated_data.pop("rooms", [])
 
         property_obj = Property.objects.create(**validated_data)
 
@@ -260,11 +318,16 @@ class PropertySerializer(serializers.ModelSerializer):
         for owner in shareholder:
             PropertyOwnership.objects.create(property=property_obj, **owner)
 
+        PropertyRoom.objects.bulk_create(
+            [PropertyRoom(property=property_obj, **room) for room in rooms]
+        )
+
         return property_obj
 
     def update(self, instance, validated_data):
         documents_data = validated_data.pop("documents_data", None)
         shareholder = validated_data.pop("shareholder", None)
+        rooms = validated_data.pop("rooms", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -279,6 +342,12 @@ class PropertySerializer(serializers.ModelSerializer):
             instance.shareholder.all().delete()
             for owner in shareholder:
                 PropertyOwnership.objects.create(property=instance, **owner)
+
+        if rooms is not None:
+            instance.rooms.all().delete()
+            PropertyRoom.objects.bulk_create(
+                [PropertyRoom(property=instance, **room) for room in rooms]
+            )
 
         return instance
 
@@ -404,6 +473,16 @@ class MortgageSerializers(serializers.ModelSerializer):
 
 
 class TenantSerializer(serializers.ModelSerializer):
+    room = serializers.SlugRelatedField(
+        slug_field="alias",
+        queryset=PropertyRoom.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    room_name = serializers.CharField(
+        source="room.room_name", read_only=True, default=None
+    )
     class Meta:
         model = Tenant
         fields = [
@@ -426,6 +505,8 @@ class TenantSerializer(serializers.ModelSerializer):
             "is_active",
             "is_password_set",
             "property",
+            "room",
+            "room_name",
             "created_at",
         ]
         read_only_fields = [
@@ -455,6 +536,25 @@ class TenantSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Email is already in use.")
 
         return value
+
+    def validate(self, attrs):
+        property_obj = attrs.get("property", getattr(self.instance, "property", None))
+        room = attrs.get("room", getattr(self.instance, "room", None))
+
+        if property_obj and property_obj.property_type == PropertyType.HMO:
+            if not room:
+                raise serializers.ValidationError(
+                    {"room": ["room is required when property is HMO."]}
+                )
+
+            if room.property_id != property_obj.id:
+                raise serializers.ValidationError(
+                    {"room": ["This room does not belong to the selected property."]}
+                )
+        else:
+            attrs["room"] = None
+
+        return attrs
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
