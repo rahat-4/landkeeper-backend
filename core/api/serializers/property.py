@@ -786,6 +786,8 @@ class PropertyOnboardingSerializer(serializers.Serializer):
         "upload_document": {"uploaded_files"},
     }
 
+    LIST_FIELD_PATTERN = re.compile(r"(shareholder|rooms)\[(\d+)\]\.(\w+)$")
+
     property = serializers.DictField(required=False)
     mortgage = serializers.DictField(required=False)
     tenant = serializers.DictField(required=False)
@@ -821,22 +823,20 @@ class PropertyOnboardingSerializer(serializers.Serializer):
                     if isinstance(value, str) and value.strip() == "":
                         value = None
 
-                    ownership_match = re.match(
-                        r"shareholder\[(\d+)\]\.(\w+)$",
-                        field_name,
-                    )
+                    list_match = self.LIST_FIELD_PATTERN.match(field_name)
 
-                    if ownership_match:
-                        index = int(ownership_match.group(1))
-                        owner_field = ownership_match.group(2)
+                    if list_match:
+                        list_name = list_match.group(1)
+                        index = int(list_match.group(2))
+                        item_field = list_match.group(3)
 
-                        property_data = nested.setdefault(step, {})
-                        shareholder = property_data.setdefault("shareholder", [])
+                        step_data = nested.setdefault(step, {})
+                        items = step_data.setdefault(list_name, [])
 
-                        while len(shareholder) <= index:
-                            shareholder.append({})
+                        while len(items) <= index:
+                            items.append({})
 
-                        shareholder[index][owner_field] = value
+                        items[index][item_field] = value
                     else:
                         nested.setdefault(step, {})[field_name] = value
 
@@ -877,11 +877,6 @@ class PropertyOnboardingSerializer(serializers.Serializer):
 
             serializer_class = self.STEP_SERIALIZERS[step_name]
             payload = dict(validated_data[step_name])
-            print(
-                f"[{step_name}] documents_data present:",
-                "documents_data" in payload,
-                payload.get("documents_data"),
-            )
 
             if step_name != "property":
                 if property_obj is None:
@@ -890,8 +885,26 @@ class PropertyOnboardingSerializer(serializers.Serializer):
                     )
                 payload["property"] = property_obj.pk
 
+            if step_name == "tenant":
+                room_name = payload.pop("room_name", None)
+                if room_name:
+                    room = property_obj.rooms.filter(room_name=room_name).first()
+                    if room is None:
+                        raise serializers.ValidationError(
+                            {
+                                "tenant": {
+                                    "room_name": [
+                                        f"Room '{room_name}' not found in this property."
+                                    ]
+                                }
+                            }
+                        )
+                    payload["room"] = room.alias
+
             serializer = serializer_class(data=payload, context=self.context)
-            serializer.is_valid(raise_exception=True)
+
+            if not serializer.is_valid():
+                raise serializers.ValidationError({step_name: serializer.errors})
 
             try:
                 instance = serializer.save(organisation=organisation)
