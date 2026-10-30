@@ -81,7 +81,7 @@ class PropertyRoomSerializer(serializers.ModelSerializer):
         fields = [
             "alias",
             "room_name",
-            "monthly_rental_income"
+            "monthly_rent"
         ]
         read_only_fields = ["alias"]
 
@@ -227,7 +227,7 @@ class PropertySerializer(serializers.ModelSerializer):
 
             if rooms is None and self.instance is None:
                 raise serializers.ValidationError(
-                    {"rooms": [f"Add {bedrooms} rooms with monthly rental income."]}
+                    {"rooms": [f"Add {bedrooms} rooms with monthly rent income."]}
                 )
 
             if rooms is not None and len(rooms) != bedrooms:
@@ -287,7 +287,7 @@ class PropertySerializer(serializers.ModelSerializer):
         index = 0
         while True:
             room_name_key = f"rooms[{index}].room_name"
-            income_key = f"rooms[{index}].monthly_rental_income"
+            income_key = f"rooms[{index}].monthly_rent"
 
             if room_name_key not in plain_data and income_key not in plain_data:
                 break
@@ -295,7 +295,7 @@ class PropertySerializer(serializers.ModelSerializer):
             rooms.append(
                 {
                     "room_name": plain_data.pop(room_name_key, None),
-                    "monthly_rental_income": plain_data.pop(income_key, None),
+                    "monthly_rent": plain_data.pop(income_key, None),
                 }
             )
             index += 1
@@ -512,9 +512,6 @@ class TenantSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "alias",
         ]
-        extra_kwargs = {
-            "room": {"write_only": True},
-        }
 
     def validate_email(self, value):
         if self.instance:

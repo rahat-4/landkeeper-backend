@@ -91,7 +91,7 @@ class PropertyRoom(CreatedAtUpdatedAtBaseModel):
         Property, on_delete=models.CASCADE, related_name="rooms"
     )
     room_name = models.CharField(max_length=255)
-    monthly_rental_income = models.DecimalField(max_digits=10, decimal_places=2)
+    monthly_rent = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
         ordering = ["id"]
