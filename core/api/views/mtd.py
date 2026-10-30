@@ -233,6 +233,10 @@ class MTDFinanceCostsView(MTDReportMixin, APIView):
 class MTDReportDownloadView(MTDReportMixin, APIView):
     """Save the declaration and download the summary as a PDF."""
 
+    def get(self, request, *args, **kwargs):
+        report = self.get_report()
+        return Response(MTDReportDeclarationSerializer(report).data)
+
     def post(self, request, *args, **kwargs):
         report = self.get_report()
         serializer = MTDReportDeclarationSerializer(data=request.data)
