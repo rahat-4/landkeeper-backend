@@ -229,7 +229,6 @@ def build_summary_pdf(report, summary):
     story = [
         Paragraph("Making Tax Digital Summary", title_style),
         Spacer(1, 1.5 * mm),
-        Paragraph(escape(str(report.organisation)), subtitle_style),
         Spacer(1, 6 * mm),
     ]
 
@@ -298,7 +297,9 @@ def build_summary_pdf(report, summary):
     header_right_style = ParagraphStyle(
         "HeaderRight", parent=header_style, alignment=TA_RIGHT
     )
-    rows = [[Paragraph("Category", header_style), Paragraph("Amount", header_right_style)]]
+    rows = [
+        [Paragraph("Category", header_style), Paragraph("Amount", header_right_style)]
+    ]
     table_style = [
         ("BACKGROUND", (0, 0), (-1, 0), BRAND),
         ("LINEBELOW", (0, 1), (-1, -1), 0.5, HAIRLINE),
