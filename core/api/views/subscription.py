@@ -16,6 +16,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
 )
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -350,6 +351,15 @@ class SubscriptionPlanListView(ListAPIView):
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
+
+        if self.request.user.is_superuser and not self.request.headers.get(
+            "X-LANDLORD-ALIAS"
+        ):
+            raise ValidationError(
+                {
+                    "landlord_alias": "X-LANDLORD-ALIAS header is required for super admin."
+                }
+            )
 
         organisation = get_request_organisation(self.request)
 
