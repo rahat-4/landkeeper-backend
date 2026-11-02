@@ -47,7 +47,7 @@ from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTrans
 from apps.organisation.models import OrganisationSubscription
 from apps.property.models import Property
 # from apps.referral.utils import validate_coupon
-from common.permission import IsLandlord
+from common.permission import IsLandlord, IsSuperAdmin
 
 logger = logging.getLogger(__name__)
 
@@ -605,7 +605,7 @@ class SubscriptionPermissionView(APIView):
 
         max_properties = subscription.plan.max_properties if subscription else None
 
-        # Superadmin no plan limit
+        # Superadmins have no plan limit
         if request.user.is_superuser:
             return Response(
                 {
@@ -630,7 +630,6 @@ class SubscriptionPermissionView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
 
 class LandlordPaymentCardCreateAPIView(ListCreateAPIView):
     permission_classes = [IsLandlord]
