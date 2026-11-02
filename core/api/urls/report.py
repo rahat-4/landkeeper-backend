@@ -2,7 +2,7 @@ from django.urls import path
 from api.views.report import (
     PropertyPortfolioExportView,
     IncomeReportView,
-    ExpenseReportView
+    ExpenseReportView,
 )
 
 urlpatterns = [
@@ -11,14 +11,6 @@ urlpatterns = [
         PropertyPortfolioExportView.as_view(),
         name="properties-portfolio",
     ),
-    path(
-        "/income-report",
-        IncomeReportView.as_view(),
-        name="income-report"
-    ),
-    path(
-        "/expense-report",
-        ExpenseReportView.as_view(),
-        name="expense-report"
-    )
+    path("/income", IncomeReportView.as_view(), name="income"),
+    path("/expense", ExpenseReportView.as_view(), name="expense"),
 ]
