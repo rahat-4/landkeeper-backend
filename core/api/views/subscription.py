@@ -16,6 +16,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
 )
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -47,7 +48,7 @@ from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTrans
 from apps.organisation.models import OrganisationSubscription
 from apps.property.models import Property
 # from apps.referral.utils import validate_coupon
-from common.permission import IsLandlord
+from common.permission import IsLandlord, IsSuperAdmin
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +352,15 @@ class SubscriptionPlanListView(ListAPIView):
     def get_serializer_context(self):
         context = super().get_serializer_context()
 
+        if self.request.user.is_superuser and not self.request.headers.get(
+            "X-LANDLORD-ALIAS"
+        ):
+            raise ValidationError(
+                {
+                    "landlord_alias": "X-LANDLORD-ALIAS header is required for super admin."
+                }
+            )
+
         organisation = get_request_organisation(self.request)
 
         print("Organisation in context:", organisation)
@@ -605,7 +615,7 @@ class SubscriptionPermissionView(APIView):
 
         max_properties = subscription.plan.max_properties if subscription else None
 
-        # Superadmin no plan limit
+        # Superadmins have no plan limit
         if request.user.is_superuser:
             return Response(
                 {
@@ -630,7 +640,6 @@ class SubscriptionPermissionView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
 
 class LandlordPaymentCardCreateAPIView(ListCreateAPIView):
     permission_classes = [IsLandlord]
