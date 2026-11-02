@@ -25,9 +25,6 @@ class PropertyRoomFilterListView(ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        organisation = get_request_organisation(self.request)
         property_alias = self.kwargs.get("property_alias")
 
-        return PropertyRoom.objects.filter(
-            property__alias=property_alias, organisation=organisation
-        )
+        return PropertyRoom.objects.filter(property__alias=property_alias)

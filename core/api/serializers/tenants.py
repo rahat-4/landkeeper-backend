@@ -112,7 +112,9 @@ class RentBalanceSummarySerializer(serializers.Serializer):
         )
         total_paid = payments.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-        first_due = payments.order_by("due_date").values_list("due_date", flat=True).first()
+        first_due = (
+            payments.order_by("due_date").values_list("due_date", flat=True).first()
+        )
         start = first_due or today
         months_billed = (today.year - start.year) * 12 + (today.month - start.month) + 1
 
@@ -125,6 +127,7 @@ class RentBalanceSummarySerializer(serializers.Serializer):
             "outstanding_balance": balance,
             "next_due_date": timezone.make_aware(datetime.combine(next_due, time.min)),
         }
+
 
 class CardPaymentRequestSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
@@ -408,6 +411,8 @@ class LandlordCardPaymentSerializer(serializers.ModelSerializer):
 class PropertySerializer(serializers.ModelSerializer):
     landlord = serializers.SerializerMethodField()
     documents = MediaSerializer(many=True, read_only=True)
+    room_name = serializers.SerializerMethodField()
+    monthly_rent = serializers.SerializerMethodField()
 
     class Meta:
         model = Property
@@ -423,6 +428,9 @@ class PropertySerializer(serializers.ModelSerializer):
             "property_tenure",
             "bedrooms",
             "bathrooms",
+            "room_name",
+            "monthly_rent",
+            "monthly_rental_income",
             "notes",
             "documents",
             "landlord",
@@ -449,3 +457,11 @@ class PropertySerializer(serializers.ModelSerializer):
             "mobile": org.primary_mobile,
             "address": org.address,
         }
+
+    def get_room_name(self, obj):
+        room = obj.rooms.first()
+        return room.room_name if room else None
+
+    def get_monthly_rent(self, obj):
+        room = obj.rooms.first()
+        return room.monthly_rent if room else None

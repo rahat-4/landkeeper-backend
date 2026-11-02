@@ -78,11 +78,7 @@ class PropertyOwnershipSerializer(serializers.ModelSerializer):
 class PropertyRoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = PropertyRoom
-        fields = [
-            "alias",
-            "room_name",
-            "monthly_rent"
-        ]
+        fields = ["alias", "room_name", "monthly_rent"]
         read_only_fields = ["alias"]
 
 
@@ -175,8 +171,8 @@ class PropertySerializer(serializers.ModelSerializer):
             return False
 
         if user.organisation_users.filter(
-                organisation=organisation,
-                role__in=[OrganisationRoleChoices.LANDLORD, OrganisationRoleChoices.ADMIN],
+            organisation=organisation,
+            role__in=[OrganisationRoleChoices.LANDLORD, OrganisationRoleChoices.ADMIN],
         ).exists():
             return True
 
@@ -232,8 +228,11 @@ class PropertySerializer(serializers.ModelSerializer):
 
             if rooms is not None and len(rooms) != bedrooms:
                 raise serializers.ValidationError(
-                    {"rooms": [
-                        f"bedrooms is {bedrooms}, so you must add exactly {bedrooms} rooms (you sent {len(rooms)})."]}
+                    {
+                        "rooms": [
+                            f"bedrooms is {bedrooms}, so you must add exactly {bedrooms} rooms (you sent {len(rooms)})."
+                        ]
+                    }
                 )
         else:
             attrs["rooms"] = []
@@ -262,9 +261,9 @@ class PropertySerializer(serializers.ModelSerializer):
             share_percentage_key = f"shareholder[{index}].share_percentage"
 
             if (
-                    owner_name_key not in plain_data
-                    and shareholder_name_key not in plain_data
-                    and share_percentage_key not in plain_data
+                owner_name_key not in plain_data
+                and shareholder_name_key not in plain_data
+                and share_percentage_key not in plain_data
             ):
                 break
 
@@ -483,6 +482,14 @@ class TenantSerializer(serializers.ModelSerializer):
     room_name = serializers.CharField(
         source="room.room_name", read_only=True, default=None
     )
+    monthly_rent = serializers.DecimalField(
+        source="room.monthly_rent",
+        read_only=True,
+        max_digits=10,
+        decimal_places=2,
+        default=None,
+    )
+
     class Meta:
         model = Tenant
         fields = [
@@ -507,6 +514,7 @@ class TenantSerializer(serializers.ModelSerializer):
             "property",
             "room",
             "room_name",
+            "monthly_rent",
             "created_at",
         ]
         read_only_fields = [
