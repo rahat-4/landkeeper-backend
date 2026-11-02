@@ -351,10 +351,6 @@ class SubscriptionPlanListView(ListAPIView):
     def get_serializer_context(self):
         context = super().get_serializer_context()
 
-        organisation = get_request_organisation(self.request)
-
-        print("Organisation in context:", organisation)
-
         # coupon_param = self.request.query_params.get("coupon_code")
 
         # if coupon_param:
@@ -378,7 +374,6 @@ class SubscriptionPlanListView(ListAPIView):
         #     context["coupon"] = coupon
 
         return context
-
 
 class LandlordPaymentCardUpdateDeleteAPIView(RetrieveUpdateDestroyAPIView):
     permission_classes = [IsLandlord]
