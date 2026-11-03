@@ -590,18 +590,16 @@ class MaintenanceRequestListCreateAPIView(ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == "POST":
             return [IsTenant()]
-        return [(IsTenant | IsLandlord | IsAdmin)()]
+        return [(IsTenant | IsLandlord | IsAdmin | IsSuperAdmin)()]
 
     def get_queryset(self):
         user = self.request.user
+
         if isinstance(user, Tenant):
             queryset = MaintenanceRequest.objects.filter(tenant=user)
         else:
-            organisation = user.get_organisation()
-            if organisation:
-                queryset = MaintenanceRequest.objects.filter(organisation=organisation)
-            else:
-                return MaintenanceRequest.objects.none()
+            organisation = get_request_organisation(self.request)
+            queryset = MaintenanceRequest.objects.filter(organisation=organisation)
 
         return queryset.annotate(
             request_id=Concat(
@@ -659,7 +657,7 @@ class MaintenanceRequestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIVie
 
 class MaintenanceRequestCommentListCreateView(ListCreateAPIView):
     serializer_class = MaintenanceRequestCommentSerializer
-    permission_classes = [IsTenant | IsLandlord | IsAdmin | IsLettingAgent]
+    permission_classes = [IsTenant | IsLandlord | IsAdmin | IsLettingAgent | IsSuperAdmin]
     pagination_class = None
 
     def get_maintenance_request(self):
@@ -670,9 +668,8 @@ class MaintenanceRequestCommentListCreateView(ListCreateAPIView):
                 alias=self.kwargs["maintenance_request_alias"],
                 tenant=user,
             )
-        organisation = user.get_organisation()
-        if not organisation:
-            raise PermissionDenied("You are not part of an organisation.")
+
+        organisation = get_request_organisation(self.request)
         return get_object_or_404(
             MaintenanceRequest,
             alias=self.kwargs["maintenance_request_alias"],
@@ -714,7 +711,7 @@ class MaintenanceRequestCommentListCreateView(ListCreateAPIView):
 
 class MaintenanceRequestCommentRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = MaintenanceRequestCommentSerializer
-    permission_classes = [IsTenant | IsLandlord | IsAdmin | IsLettingAgent]
+    permission_classes = [IsTenant | IsLandlord | IsAdmin | IsLettingAgent | IsSuperAdmin]
     lookup_field = "alias"
     lookup_url_kwarg = "comment_alias"
 
@@ -726,9 +723,8 @@ class MaintenanceRequestCommentRetrieveUpdateDestroyView(RetrieveUpdateDestroyAP
                 alias=self.kwargs["maintenance_request_alias"],
                 tenant=user,
             )
-        organisation = user.get_organisation()
-        if not organisation:
-            raise PermissionDenied("You are not part of an organisation.")
+
+        organisation = get_request_organisation(self.request)
         return get_object_or_404(
             MaintenanceRequest,
             alias=self.kwargs["maintenance_request_alias"],
@@ -751,12 +747,14 @@ class MaintenanceRequestCommentRetrieveUpdateDestroyView(RetrieveUpdateDestroyAP
 
     def perform_update(self, serializer):
         comment = self.get_object()
-        if comment.author != self.request.user:
+        user = self.request.user
+        if comment.author != user and not user.is_superuser:
             raise PermissionDenied("You can only edit your own comment.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.author != self.request.user:
+        user = self.request.user
+        if instance.author != user and not user.is_superuser:
             raise PermissionDenied("You can only delete your own comment.")
         comment_id = instance.id
         instance.delete()
