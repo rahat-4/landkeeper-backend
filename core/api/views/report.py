@@ -611,7 +611,7 @@ class IncomeReportView(APIView):
         ):
             return qs
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return qs.none()
 
@@ -806,7 +806,7 @@ class ExpenseReportView(APIView):
         ):
             return qs
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return qs.none()
 

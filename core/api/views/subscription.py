@@ -129,7 +129,7 @@ class SelectSubscriptionView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            organisation = request.user.get_organisation()
+            organisation = get_request_organisation(request)
 
             current_subscription = (
                 OrganisationSubscription.objects.filter(organisation=organisation)
@@ -435,11 +435,11 @@ class LandlordPaymentCardUpdateDeleteAPIView(RetrieveUpdateDestroyAPIView):
     lookup_url_kwarg = "alias"
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         return PaymentCard.objects.filter(organisation=organisation)
 
     def update(self, request, *args, **kwargs):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         instance = self.get_object()
 
         make_default = request.data.get("is_default", True)
@@ -515,7 +515,7 @@ class LandlordPaymentCardUpdateDeleteAPIView(RetrieveUpdateDestroyAPIView):
         )
 
     def perform_destroy(self, instance):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         was_default = instance.is_default
 
         stripe.PaymentMethod.detach(instance.stripe_payment_method_id)
@@ -545,7 +545,7 @@ class LandlordBillingHistoryAPIView(ListAPIView):
     permission_classes = [IsLandlord]
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         return (
             PaymentTransaction.objects.filter(
@@ -586,7 +586,7 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
         return context
 
     def get_object(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         return get_object_or_404(
             OrganisationSubscription.objects.select_related("plan"),
@@ -693,7 +693,7 @@ class LandlordPaymentCardCreateAPIView(ListCreateAPIView):
     serializer_class = PaymentCardSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         return PaymentCard.objects.filter(organisation=organisation).order_by(
             "-is_default", "-id"
         )
@@ -708,7 +708,7 @@ class LandlordPaymentCardCreateAPIView(ListCreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
 
         if not organisation.stripe_customer_id:
             return Response(
@@ -747,7 +747,7 @@ class CancelPendingDowngradeAPIView(APIView):
     permission_classes = [IsLandlord]
 
     def post(self, request):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"error": "Organisation not found for the user."},

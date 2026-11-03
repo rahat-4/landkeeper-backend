@@ -256,7 +256,7 @@ class PropertyTypeDashboardView(RetrieveAPIView):
     permission_classes = [IsLandlord | IsAdmin | IsMortgageAdviser]
 
     def get_object(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         queryset = (
             get_accessible_properties(self.request.user, organisation)
@@ -301,7 +301,7 @@ class ComplianceTypeDashboardView(RetrieveAPIView):
     permission_classes = [IsLandlord | IsAdmin]
 
     def get_object(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         queryset = (
             ComplianceAndCertification.objects.filter(
@@ -366,7 +366,7 @@ class DashboardIncomeExpenseDashboardView(RetrieveAPIView):
         return months
 
     def get_object(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         months = self.get_months()
 
         # First day of each month in the range, oldest first, ending this month

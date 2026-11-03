@@ -9,6 +9,7 @@ from apps.subscription.models import (
     PaymentCard,
     PaymentTransaction,
 )
+from apps.organisation.utils import get_request_organisation
 
 # from apps.referral.utils import get_discounted_price
 
@@ -61,9 +62,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
 
     def get_features(self, obj):
         # Uses the prefetched queryset when available (see SubscriptionPlanListView)
-        plan_features = [
-            pf for pf in obj.plan_features.all() if pf.feature.is_active
-        ]
+        plan_features = [pf for pf in obj.plan_features.all() if pf.feature.is_active]
         return SubscriptionPlanFeatureSerializer(plan_features, many=True).data
 
     # def get_discounted_price(self, obj):
@@ -106,7 +105,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
 
         if request and hasattr(request, "user") and request.user.is_authenticated:
-            organisation = request.user.get_organisation()
+            organisation = get_request_organisation(request)
 
             if organisation and hasattr(organisation, "subscription"):
                 return organisation.subscription.plan == obj

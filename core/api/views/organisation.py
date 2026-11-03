@@ -26,6 +26,7 @@ from apps.organisation.stripe_connect import (
     logger,
     verify_and_consume_state,
 )
+from apps.organisation.utils import get_request_organisation
 
 from common.permission import IsLandlord
 
@@ -46,7 +47,7 @@ class OrganisationDetailView(RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         if not organisation:
             raise NotFound("Organisation not found.")
         return organisation
@@ -57,7 +58,7 @@ class OrganisationUserListView(ListAPIView):
     serializer_class = OrganisationUserSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         if not organisation:
             raise NotFound("Organisation not found.")
         return OrganisationUser.objects.filter(organisation=organisation).exclude(
@@ -70,7 +71,7 @@ class OrganisationInviteUserView(ListAPIView):
     serializer_class = OrganisationInviterUserSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         if not organisation:
             raise NotFound("Organisation not found.")
         return InviteUser.objects.filter(organisation=organisation)
@@ -81,7 +82,7 @@ class OrganisationUserDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = OrganisationUserSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
         if not organisation:
             raise NotFound("Organisation not found.")
         return OrganisationUser.objects.filter(
@@ -97,7 +98,7 @@ class OrganisationUserDetailView(RetrieveUpdateDestroyAPIView):
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        context["organisation"] = self.request.user.get_organisation()
+        context["organisation"] = get_request_organisation(self.request)
         return context
 
     def perform_destroy(self, instance):
@@ -108,7 +109,7 @@ class StripeConnectOAuthStartView(APIView):
     permission_classes = [IsLandlord]
 
     def get(self, request):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST
@@ -209,7 +210,7 @@ class StripeConnectStatusView(APIView):
     permission_classes = [IsLandlord]
 
     def get(self, request):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST
@@ -227,7 +228,7 @@ class StripeConnectDisconnectView(APIView):
     permission_classes = [IsLandlord]
 
     def post(self, request):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"error": "No organisation found."}, status=status.HTTP_400_BAD_REQUEST

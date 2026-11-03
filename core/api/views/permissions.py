@@ -14,11 +14,12 @@ from rest_framework.generics import (
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.authentication.models import Permission
-from apps.organisation.models import OrganisationUser
 from apps.property.models import (
     Property,
     Mortgage,
 )
+from apps.organisation.utils import get_request_organisation
+
 
 from ..serializers.permissions import (
     PermissionSerializer,
@@ -40,7 +41,7 @@ class PermissionListAPIView(CreateAPIView):
     serializer_class = PermissionSerializer
 
     def get_organisation(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -63,7 +64,7 @@ class PermissionDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = PermissionSerializer
 
     def get_organisation(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -86,7 +87,7 @@ class PropertyPermissionListAPIView(ListAPIView):
     serializer_class = PermissionSerializer
 
     def get_organisation(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -114,7 +115,7 @@ class MortgagePermissionListAPIView(ListAPIView):
     serializer_class = PermissionSerializer
 
     def get_organisation(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -150,7 +151,7 @@ class BulkPropertyPermissionView(ListCreateAPIView):
         return BulkPropertyPermissionSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -195,7 +196,7 @@ class BulkPropertyPermissionView(ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -280,7 +281,7 @@ class BulkMortgagePermissionView(ListCreateAPIView):
         return BulkPropertyPermissionSerializer
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")
@@ -325,7 +326,7 @@ class BulkMortgagePermissionView(ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
 
         if not organisation:
             raise NotFound("Organisation not found for the user.")

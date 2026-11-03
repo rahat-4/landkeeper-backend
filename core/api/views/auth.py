@@ -588,7 +588,7 @@ class SendInviteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"detail": "You are not part of any organisation."},
@@ -659,7 +659,7 @@ class ResendInviteView(APIView):
     permission_classes = [IsAuthenticated, IsLandlord]
 
     def post(self, request, alias):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"detail": "You are not part of any organisation."},
@@ -684,7 +684,7 @@ class DeleteInviteView(APIView):
     permission_classes = [IsLandlord]
 
     def delete(self, request, alias):
-        organisation = request.user.get_organisation()
+        organisation = get_request_organisation(request)
         if not organisation:
             return Response(
                 {"detail": "You are not part of any organisation."},

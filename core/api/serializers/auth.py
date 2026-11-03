@@ -12,8 +12,10 @@ from apps.organisation.models import (
     OrganisationUser,
     OrganisationSubscription,
 )
+from apps.organisation.utils import get_request_organisation
 from apps.property.models import Tenant
 from apps.subscription.limits import can_add_user, get_organisation_user_count
+
 # from apps.referral.models import Referral
 # from apps.referral.affonso import AffonsoAPI
 # from apps.referral.utils import get_coupon_code
@@ -136,7 +138,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 #             )
 #
 #             return user
-
 
 
 class EmailVerifySerializer(serializers.Serializer):
@@ -402,7 +403,7 @@ class InviteUserSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         request = self.context.get("request")
-        organisation = request.user.get_organisation() if request else None
+        organisation = get_request_organisation(request) if request else None
 
         if not organisation:
             raise serializers.ValidationError("Organisation not found for the user.")
