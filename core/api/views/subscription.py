@@ -1,5 +1,6 @@
 import logging
 from stripe import InvalidRequestError
+
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -9,6 +10,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Prefetch
+
 from rest_framework.generics import (
     ListAPIView,
     RetrieveUpdateAPIView,
@@ -43,9 +46,15 @@ from apps.organisation.stripe_service import (
     cancel_pending_downgrade,
 )
 from apps.organisation.utils import get_request_organisation
-from apps.subscription.models import SubscriptionPlan, PaymentCard, PaymentTransaction
+from apps.subscription.models import (
+    SubscriptionPlanFeature,
+    SubscriptionPlan,
+    PaymentCard,
+    PaymentTransaction,
+)
 from apps.organisation.models import OrganisationSubscription
 from apps.property.models import Property
+
 # from apps.referral.utils import validate_coupon
 from common.permission import IsLandlord
 
@@ -296,6 +305,7 @@ class SelectSubscriptionView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(View):
 
@@ -340,20 +350,24 @@ class StripeWebhookView(View):
 
 class SubscriptionPlanListView(ListAPIView):
     serializer_class = SubscriptionPlanSerializer
+    permission_classes = []
 
     def get_queryset(self):
         return (
             SubscriptionPlan.objects.filter(is_active=True)
-            .prefetch_related("features")
+            .prefetch_related(
+                Prefetch(
+                    "plan_features",
+                    queryset=SubscriptionPlanFeature.objects.select_related(
+                        "feature"
+                    ).order_by("feature__display_order", "feature_id"),
+                )
+            )
             .order_by("monthly_price")
         )
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-
-        organisation = get_request_organisation(self.request)
-
-        print("Organisation in context:", organisation)
 
         # coupon_param = self.request.query_params.get("coupon_code")
 

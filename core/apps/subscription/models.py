@@ -22,7 +22,11 @@ class SubscriptionFeature(models.Model):
     description = models.TextField(
         blank=True,
     )
+    display_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "id"]
 
     def __str__(self):
         return self.name
@@ -42,6 +46,11 @@ class SubscriptionPlan(CreatedAtUpdatedAtBaseModel):
         null=True,
     )
     max_properties = models.PositiveIntegerField()
+    max_users = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum number of users. Leave empty for unlimited.",
+    )
     # referral_discount_percent = models.DecimalField(
     #     max_digits=5,
     #     decimal_places=2,
@@ -54,6 +63,7 @@ class SubscriptionPlan(CreatedAtUpdatedAtBaseModel):
     )
     features = models.ManyToManyField(
         SubscriptionFeature,
+        through="SubscriptionPlanFeature",
         related_name="plans",
         blank=True,
     )
@@ -73,6 +83,47 @@ class SubscriptionPlan(CreatedAtUpdatedAtBaseModel):
 
     def __str__(self):
         return self.name
+
+    def has_feature(self, code):
+        return self.plan_features.filter(
+            feature__code=code,
+            feature__is_active=True,
+            is_included=True,
+        ).exists()
+
+
+class SubscriptionPlanFeature(models.Model):
+    """Per-plan value of a feature, e.g. "Limited" vs "Full" for Reports."""
+
+    plan = models.ForeignKey(
+        SubscriptionPlan,
+        on_delete=models.CASCADE,
+        related_name="plan_features",
+    )
+    feature = models.ForeignKey(
+        SubscriptionFeature,
+        on_delete=models.CASCADE,
+        related_name="plan_features",
+    )
+    is_included = models.BooleanField(default=True)
+    value = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Display text, e.g. 'Up to 3' or 'Priority support'. "
+        "Empty means a plain included/not-included tick.",
+    )
+
+    class Meta:
+        ordering = ["feature__display_order", "feature_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "feature"],
+                name="unique_feature_per_plan",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.plan} - {self.feature}"
 
 
 class PaymentCard(CreatedAtUpdatedAtBaseModel):

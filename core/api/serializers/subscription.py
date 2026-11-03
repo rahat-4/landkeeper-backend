@@ -4,8 +4,8 @@ import math
 
 from apps.organisation.models import OrganisationSubscription
 from apps.subscription.models import (
-    SubscriptionFeature,
     SubscriptionPlan,
+    SubscriptionPlanFeature,
     PaymentCard,
     PaymentTransaction,
 )
@@ -13,21 +13,24 @@ from apps.subscription.models import (
 # from apps.referral.utils import get_discounted_price
 
 
-class SubscriptionFeatureSerializer(serializers.ModelSerializer):
+class SubscriptionPlanFeatureSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(source="feature.code", read_only=True)
+    name = serializers.CharField(source="feature.name", read_only=True)
+    description = serializers.CharField(source="feature.description", read_only=True)
+
     class Meta:
-        model = SubscriptionFeature
+        model = SubscriptionPlanFeature
         fields = [
             "code",
             "name",
             "description",
+            "is_included",
+            "value",
         ]
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
-    features = SubscriptionFeatureSerializer(
-        many=True,
-        read_only=True,
-    )
+    features = serializers.SerializerMethodField()
     current_plan = serializers.SerializerMethodField()
 
     # Coupon-related fields disabled for now
@@ -48,12 +51,20 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             # "discount_value",
             # "discount_type",
             "max_properties",
+            "max_users",
             # "referral_discount_percent",
             "description",
             "features",
             "is_active",
             "current_plan",
         ]
+
+    def get_features(self, obj):
+        # Uses the prefetched queryset when available (see SubscriptionPlanListView)
+        plan_features = [
+            pf for pf in obj.plan_features.all() if pf.feature.is_active
+        ]
+        return SubscriptionPlanFeatureSerializer(plan_features, many=True).data
 
     # def get_discounted_price(self, obj):
     #     coupon = self.context.get("coupon")

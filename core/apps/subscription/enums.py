@@ -2,7 +2,7 @@ from django.db import models
 
 
 class PlanType(models.TextChoices):
-    BASIC = "BASIC", "Basic"
+    STARTER = "STARTER", "Starter"
     STANDARD = "STANDARD", "Standard"
     PREMIUM = "PREMIUM", "Premium"
 
