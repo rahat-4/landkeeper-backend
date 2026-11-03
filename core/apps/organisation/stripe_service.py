@@ -9,6 +9,7 @@ from django.utils import timezone as django_timezone
 from apps.organisation.enums import OrganisationSubscriptionStatus
 from apps.organisation.models import Organisation, OrganisationSubscription
 from apps.subscription.enums import PaymentTransactionStatus
+from apps.subscription.limits import ensure_plan_fits_users
 from apps.subscription.models import PaymentCard, PaymentTransaction, SubscriptionPlan
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -705,6 +706,7 @@ def change_subscription_plan(organisation, new_plan):
                 max_properties=new_plan.max_properties,
                 excess=current_count - new_plan.max_properties,
             )
+        ensure_plan_fits_users(organisation, new_plan)
 
     price_id = get_or_create_stripe_price(new_plan)
 
@@ -1384,6 +1386,7 @@ def schedule_plan_downgrade(organisation, new_plan):
             max_properties=new_plan.max_properties,
             excess=excess,
         )
+    ensure_plan_fits_users(organisation, new_plan)
 
     new_price_id = get_or_create_stripe_price(new_plan)
 

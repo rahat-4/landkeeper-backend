@@ -46,6 +46,12 @@ from apps.organisation.stripe_service import (
     cancel_pending_downgrade,
 )
 from apps.organisation.utils import get_request_organisation
+from apps.subscription.limits import (
+    PlanUserLimitBlockedError,
+    can_add_user,
+    ensure_plan_fits_users,
+    get_organisation_user_count,
+)
 from apps.subscription.models import (
     SubscriptionPlanFeature,
     SubscriptionPlan,
@@ -59,6 +65,24 @@ from apps.property.models import Property
 from common.permission import IsLandlord
 
 logger = logging.getLogger(__name__)
+
+
+def _user_limit_blocked_response(plan, exc):
+    return Response(
+        {
+            "detail": (
+                f"Cannot switch to '{plan.name}'. "
+                f"You currently have {exc.current_user_count} "
+                f"users, but this plan only allows "
+                f"{exc.max_users}. Please remove "
+                f"{exc.excess} users before downgrading."
+            ),
+            "current_user_count": exc.current_user_count,
+            "new_plan_max_users": exc.max_users,
+            "users_to_remove": exc.excess,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 def _release_pending_schedule(current_subscription):
@@ -177,6 +201,8 @@ class SelectSubscriptionView(APIView):
                                     },
                                     status=status.HTTP_400_BAD_REQUEST,
                                 )
+                            except PlanUserLimitBlockedError as exc:
+                                return _user_limit_blocked_response(plan, exc)
                             except InvalidRequestError as exc:
                                 logger.warning(
                                     "Stripe rejected plan upgrade for org %s: %s",
@@ -224,6 +250,8 @@ class SelectSubscriptionView(APIView):
                                     },
                                     status=status.HTTP_400_BAD_REQUEST,
                                 )
+                            except PlanUserLimitBlockedError as exc:
+                                return _user_limit_blocked_response(plan, exc)
                             except InvalidRequestError as exc:
                                 logger.warning(
                                     "Stripe rejected scheduled downgrade for org %s: %s",
@@ -267,6 +295,11 @@ class SelectSubscriptionView(APIView):
                             },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+
+                    try:
+                        ensure_plan_fits_users(organisation, plan)
+                    except PlanUserLimitBlockedError as exc:
+                        return _user_limit_blocked_response(plan, exc)
 
                 result = create_subscription_with_client_secret(
                     organisation=organisation,
@@ -574,6 +607,7 @@ class LandlordSubscriptionAPIView(RetrieveUpdateAPIView):
                 "plan_type": pending_plan.plan_type,
                 "monthly_price": str(pending_plan.monthly_price),
                 "max_properties": pending_plan.max_properties,
+                "max_users": pending_plan.max_users,
                 "effective_date": pending_info["effective_date"],
             }
         else:
@@ -618,6 +652,8 @@ class SubscriptionPermissionView(APIView):
         )
 
         max_properties = subscription.plan.max_properties if subscription else None
+        current_user_count = get_organisation_user_count(organisation)
+        max_users = subscription.plan.max_users if subscription else None
 
         # Superadmin no plan limit
         if request.user.is_superuser:
@@ -626,6 +662,9 @@ class SubscriptionPermissionView(APIView):
                     "can_create_property": True,
                     "property_count": current_property_count,
                     "max_properties": max_properties,
+                    "can_add_user": True,
+                    "user_count": current_user_count,
+                    "max_users": max_users,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -641,6 +680,9 @@ class SubscriptionPermissionView(APIView):
                 "can_create_property": current_property_count < max_properties,
                 "property_count": current_property_count,
                 "max_properties": max_properties,
+                "can_add_user": can_add_user(subscription.plan, current_user_count),
+                "user_count": current_user_count,
+                "max_users": max_users,
             },
             status=status.HTTP_200_OK,
         )

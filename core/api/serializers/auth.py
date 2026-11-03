@@ -13,6 +13,7 @@ from apps.organisation.models import (
     OrganisationSubscription,
 )
 from apps.property.models import Tenant
+from apps.subscription.limits import can_add_user, get_organisation_user_count
 # from apps.referral.models import Referral
 # from apps.referral.affonso import AffonsoAPI
 # from apps.referral.utils import get_coupon_code
@@ -438,6 +439,15 @@ class AcceptInviteSerializer(serializers.Serializer):
         if User.objects.filter(email=invite.email).exists():
             raise serializers.ValidationError(
                 "An account with this email already exists"
+            )
+
+        subscription = getattr(invite.organisation, "subscription", None)
+        if subscription and not can_add_user(
+            subscription.plan, get_organisation_user_count(invite.organisation)
+        ):
+            raise serializers.ValidationError(
+                "This organisation has reached the maximum number of users "
+                "for its plan. Please ask the account owner to upgrade."
             )
 
         return data

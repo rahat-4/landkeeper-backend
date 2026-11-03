@@ -28,7 +28,11 @@ from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView, RetrieveUpdateAPIView, ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from apps.organisation.enums import OrganisationRoleChoices
+from apps.organisation.enums import (
+    OrganisationRoleChoices,
+    OrganisationSubscriptionStatus,
+)
+from apps.subscription.limits import can_add_user, get_organisation_seat_count
 from apps.organisation.models import OrganisationUser, Organisation
 from apps.organisation.utils import get_request_organisation
 from apps.property.models import Tenant
@@ -589,6 +593,40 @@ class SendInviteView(APIView):
                 {"detail": "You are not part of any organisation."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if not request.user.is_superuser:
+            subscription = getattr(organisation, "subscription", None)
+
+            if not subscription:
+                return Response(
+                    {"subscription": "No active subscription found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if subscription.status not in [
+                OrganisationSubscriptionStatus.ACTIVE,
+                OrganisationSubscriptionStatus.TRIALING,
+            ]:
+                return Response(
+                    {"subscription": "Your subscription is not active."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            max_users = subscription.plan.max_users
+            if not can_add_user(
+                subscription.plan, get_organisation_seat_count(organisation)
+            ):
+                return Response(
+                    {
+                        "user": (
+                            f"Your {subscription.plan.name} plan allows "
+                            f"a maximum of {max_users} users "
+                            "(including pending invites). "
+                            "Please upgrade your plan to add more users."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         invite, created = InviteUser.objects.get_or_create(
             email=email,
