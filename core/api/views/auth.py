@@ -60,6 +60,7 @@ class AccountRegistrationView(CreateAPIView):
     def get_queryset(self):
         return User.objects.all()
 
+
 #
 # class JoinReferralProgramView(CreateAPIView):
 #     serializer_class = ReferralRegistrationSerializer
@@ -680,7 +681,7 @@ class ResendInviteView(APIView):
 
 
 class DeleteInviteView(APIView):
-    permission_classes = [IsAuthenticated, IsLandlord]
+    permission_classes = [IsLandlord]
 
     def delete(self, request, alias):
         organisation = request.user.get_organisation()
@@ -782,7 +783,8 @@ class OrganisationUserListAPIView(ListAPIView):
     search_fields = ["user__email", "user__first_name", "user__last_name"]
 
     def get_queryset(self):
-        organisation = self.request.user.get_organisation()
+        organisation = get_request_organisation(self.request)
+
         if not organisation:
             return OrganisationUser.objects.none()
 

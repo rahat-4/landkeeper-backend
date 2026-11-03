@@ -50,7 +50,7 @@ from apps.subscription.limits import (
     PlanUserLimitBlockedError,
     can_add_user,
     ensure_plan_fits_users,
-    get_organisation_user_count,
+    get_organisation_seat_count,
 )
 from apps.subscription.models import (
     SubscriptionPlanFeature,
@@ -652,7 +652,7 @@ class SubscriptionPermissionView(APIView):
         )
 
         max_properties = subscription.plan.max_properties if subscription else None
-        current_user_count = get_organisation_user_count(organisation)
+        current_user_count = get_organisation_seat_count(organisation)
         max_users = subscription.plan.max_users if subscription else None
 
         # Superadmin no plan limit

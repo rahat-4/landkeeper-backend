@@ -100,6 +100,9 @@ class OrganisationUserDetailView(RetrieveUpdateDestroyAPIView):
         context["organisation"] = self.request.user.get_organisation()
         return context
 
+    def perform_destroy(self, instance):
+        instance.user.delete()
+
 
 class StripeConnectOAuthStartView(APIView):
     permission_classes = [IsLandlord]
