@@ -630,14 +630,14 @@ class MaintenanceRequestListCreateAPIView(ListCreateAPIView):
 class MaintenanceRequestRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = MaintenanceRequestSerializer
     lookup_field = "alias"
-    permission_classes = [IsTenant | IsLandlord | IsAdmin]
+    permission_classes = [IsTenant | IsLandlord | IsAdmin | IsSuperAdmin ]
 
     def get_queryset(self):
         user = self.request.user
         if isinstance(user, Tenant):
             return MaintenanceRequest.objects.filter(tenant=user)
 
-        organisation = user.get_organisation()
+        organisation = get_request_organisation(self.request)
         if organisation:
             return MaintenanceRequest.objects.filter(organisation=organisation)
 
