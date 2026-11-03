@@ -338,6 +338,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class TenantProfileSerializer(serializers.ModelSerializer):
+    plan = serializers.SerializerMethodField()
     role = serializers.SerializerMethodField()
     is_password_available = serializers.SerializerMethodField()
     # is_referral = serializers.SerializerMethodField()
@@ -350,6 +351,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             "first_name",
             "middle_name",
             "last_name",
+            "plan",
             "role",
             "phone",
             "avatar",
@@ -362,12 +364,18 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "email",
+            "plan",
             "role",
             "is_active",
             "created_at",
             "updated_at",
             "rent_amount",
         ]
+
+    def get_plan(self, obj):
+        subscription = getattr(obj.organisation, "subscription", None)
+
+        return subscription.plan.plan_type if subscription else None
 
     def get_role(self, obj):
         return "TENANT"

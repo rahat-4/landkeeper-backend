@@ -105,6 +105,13 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
 
         if request and hasattr(request, "user") and request.user.is_authenticated:
+            # Super admin can list plans without the X-LANDLORD-ALIAS header;
+            # there is no "current plan" unless a landlord is selected.
+            if request.user.is_superuser and not getattr(
+                request, "organisation", None
+            ):
+                return False
+
             organisation = get_request_organisation(request)
 
             if organisation and hasattr(organisation, "subscription"):
