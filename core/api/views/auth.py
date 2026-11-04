@@ -572,7 +572,7 @@ class UserProfileView(RetrieveUpdateAPIView):
 
 
 class SendInviteView(APIView):
-    permission_classes = [IsAuthenticated, IsLandlord]
+    permission_classes = [IsAuthenticated, IsLandlord | IsSuperAdmin]
 
     def post(self, request):
         serializer = InviteUserSerializer(
@@ -656,7 +656,7 @@ class SendInviteView(APIView):
 
 
 class ResendInviteView(APIView):
-    permission_classes = [IsAuthenticated, IsLandlord]
+    permission_classes = [IsAuthenticated, IsLandlord | IsSuperAdmin]
 
     def post(self, request, alias):
         organisation = get_request_organisation(request)
@@ -681,7 +681,7 @@ class ResendInviteView(APIView):
 
 
 class DeleteInviteView(APIView):
-    permission_classes = [IsLandlord]
+    permission_classes = [IsLandlord | IsSuperAdmin]
 
     def delete(self, request, alias):
         organisation = get_request_organisation(request)
