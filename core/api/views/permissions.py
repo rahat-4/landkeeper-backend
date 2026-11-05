@@ -31,6 +31,7 @@ from ..serializers.permissions import (
 from common.permission import (
     IsLandlord,
     IsAdmin,
+    IsSuperAdmin,
 )
 
 User = get_user_model()
@@ -140,7 +141,7 @@ class MortgagePermissionListAPIView(ListAPIView):
 
 class BulkPropertyPermissionView(ListCreateAPIView):
     serializer_class = BulkPropertyPermissionSerializer
-    permission_classes = [IsLandlord]
+    permission_classes = [IsLandlord | IsSuperAdmin]
 
     def get_serializer_class(self):
         permission_status = self.request.query_params.get("permission_status")
@@ -270,7 +271,7 @@ class BulkPropertyPermissionView(ListCreateAPIView):
 
 class BulkMortgagePermissionView(ListCreateAPIView):
     serializer_class = BulkPropertyPermissionSerializer
-    permission_classes = [IsLandlord]
+    permission_classes = [IsLandlord | IsSuperAdmin]
 
     def get_serializer_class(self):
         permission_status = self.request.query_params.get("permission_status")
